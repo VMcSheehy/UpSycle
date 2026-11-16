@@ -21,11 +21,9 @@ export default function ShippingPolicyPage() {
       lastUpdated="August 25, 2026"
       disclaimer={
         <>
-          This page reflects UpSycle Market&rsquo;s current Shipping &amp; Delivery Policy. It is
-          still not legal advice &mdash; have an attorney review it before you rely on it. Because
-          listings on UpSycle Market are created and fulfilled by independent sellers, shipping
-          methods, timelines, and rates can vary by seller and are shown on each listing before
-          checkout.
+          Listings on UpSycle Market are created and fulfilled by independent sellers, so shipping
+          methods, timelines, and rates vary by seller. Sellers set their own shipping rates, and
+          the rate is shown on each listing and again at checkout.
         </>
       }
       toc={toc}
@@ -48,17 +46,10 @@ export default function ShippingPolicyPage() {
           our inventory and will be responsible for shipping your products.
         </p>
         <h3>Shipping Fees</h3>
-        <p>We offer shipping at the following rates:</p>
-        <ul>
-          <li>
-            <strong>Standard</strong> &mdash; estimated 5&ndash;7 business days,{" "}
-            <span className="legal-placeholder">[rate not yet set]</span>
-          </li>
-          <li>
-            <strong>Next Day</strong> &mdash;{" "}
-            <span className="legal-placeholder">[rate not yet set]</span>
-          </li>
-        </ul>
+        <p>
+          Sellers set their own shipping rates. The rate for a listing is shown on that listing and
+          again at checkout.
+        </p>
         <p>
           All times and dates given for delivery of the products are given in good faith but are
           estimates only. Buyer is responsible for shipping charges.

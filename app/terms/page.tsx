@@ -51,15 +51,6 @@ export default function TermsPage() {
       title="Terms & Conditions"
       effectiveDate="August 25, 2026"
       lastUpdated="August 25, 2026"
-      disclaimer={
-        <>
-          This page reflects UpSycle Market&rsquo;s current Terms &amp; Conditions, including our
-          real entity, contact, and business details. It is still not legal advice &mdash; have an
-          attorney licensed in California review it before you rely on it, especially the
-          arbitration, liability-limitation, and California consumer-rights sections, since those
-          provisions carry specific enforceability requirements.
-        </>
-      }
       toc={toc}
     >
       <LegalSection id="agreement" num="01" title="Agreement to These Terms">
@@ -907,8 +898,7 @@ export default function TermsPage() {
           Notwithstanding anything to the contrary contained herein, our liability to you for any
           cause whatsoever and regardless of the form of the action, will at all times be limited to
           the lesser of the amount paid, if any, by you to us during the six (6) month period prior
-          to any cause of action arising or{" "}
-          <span className="legal-placeholder">$500.00 USD</span>. Certain US state laws and
+          to any cause of action arising or $500.00 USD. Certain US state laws and
           international laws do not allow limitations on implied warranties or the exclusion or
           limitation of certain damages. If these laws apply to you, some or all of the above
           disclaimers or limitations may not apply to you, and you may have additional rights.

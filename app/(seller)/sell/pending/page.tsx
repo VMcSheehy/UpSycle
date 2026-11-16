@@ -31,8 +31,8 @@ export default async function SellerPendingPage({
       </p>
       <p className="mx-auto mb-10 max-w-xl text-[0.95rem] font-light leading-loose text-[var(--muted2)]">
         Your account status is currently <strong className="text-[var(--rg-light)]">Pending</strong>.
-        We&apos;ll email you once an admin has reviewed your sample photos, website/social links,
-        and supplier information — most applications are reviewed within a few business days.
+        We&apos;ll email you once an admin has reviewed your sample photos and website or social
+        links. Most applications are reviewed within a few business days.
         There&apos;s nothing further you need to do right now.
       </p>
       <div className="flex flex-wrap justify-center gap-4">

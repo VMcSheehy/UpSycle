@@ -22,11 +22,9 @@ export default function ReturnPolicyPage() {
       lastUpdated="August 25, 2026"
       disclaimer={
         <>
-          This page reflects UpSycle Market&rsquo;s current Return Policy. It is still not legal
-          advice &mdash; have an attorney review it before you rely on it. Because listings on
-          UpSycle Market are created and fulfilled by independent sellers, individual sellers may
-          also post their own return terms on a listing; where they do, those terms control for
-          that item alongside this policy.
+          Listings on UpSycle Market are created and fulfilled by independent sellers. Individual
+          sellers may also post their own return terms on a listing. Where they do, those terms
+          control for that item alongside this policy.
         </>
       }
       toc={toc}

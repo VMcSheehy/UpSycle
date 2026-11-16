@@ -145,10 +145,6 @@ export default async function AdminSellersPage() {
                   </dd>
                 </div>
                 <div className="admin-review-field">
-                  <dt>Suppliers</dt>
-                  <dd>{seller.supplierList.length > 0 ? seller.supplierList.join(", ") : "—"}</dd>
-                </div>
-                <div className="admin-review-field">
                   <dt>Applied</dt>
                   <dd>{seller.createdAt.toLocaleDateString()}</dd>
                 </div>

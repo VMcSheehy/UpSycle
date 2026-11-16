@@ -29,15 +29,6 @@ export default function PrivacyPolicyPage() {
       title="Privacy Policy"
       effectiveDate="August 25, 2026"
       lastUpdated="August 25, 2026"
-      disclaimer={
-        <>
-          This page reflects UpSycle Market&rsquo;s current Privacy Notice, including our real
-          entity and contact details. It is still not legal advice &mdash; privacy obligations
-          depend on where your users are located, and this notice should be reviewed by an
-          attorney before you rely on it, especially the California and other US state privacy
-          rights sections, since requirements vary by state and change often.
-        </>
-      }
       toc={toc}
     >
       <LegalSection id="overview" num="01" title="Overview">

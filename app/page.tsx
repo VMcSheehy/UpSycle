@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getActivePlacementPeriod, resolveFeaturedProduct } from "@/lib/placement";
 import ProductCard from "@/components/ProductCard";
 import FeaturedBadge from "@/components/FeaturedBadge";
+import { SELLER_TIER_OPTIONS, SELLER_TIER_VISIBILITY_COPY } from "@/lib/seller-tiers";
 
 // Featured products below are fetched live from the DB, so this page can't
 // be statically generated at build time (no DATABASE_URL available then).
@@ -48,14 +49,14 @@ const howItWorksCards = [
     type: "For Artists",
     title: "Your Craft, Your Platform",
     desc: "List your work in a space built specifically for makers. No competing with factory goods. No getting lost in a catalog of millions.",
-    feeAmount: "$19.99",
-    feeLabel: "per month · flat subscription, no per-sale commissions",
+    feeAmount: "",
+    feeLabel: "per month · no per-sale commissions",
   },
   {
     num: "03",
     type: "Payments",
     title: "Simple, Transparent Pricing",
-    desc: "No hidden fees. Buyers pay 6% at checkout. Artists pay $19.99/month. Every dollar is clear so makers can focus on creating.",
+    desc: "No hidden fees. Buyers pay 6% at checkout. Artists pay $39.99, $29.99, or $19.99 a month, depending on tier. Every dollar is clear so makers can focus on creating.",
     feeAmount: "Stripe",
     feeLabel: "secure processing · fast payouts",
   },
@@ -64,7 +65,7 @@ const howItWorksCards = [
 const artistValues = [
   "Zero tolerance for resellers — every listing must be handmade or upcycled by the seller personally",
   "Each artist receives a featured profile with their story, craft, and creative vision front and center",
-  "Flat monthly subscription — makers keep more of every sale with no per-transaction commissions",
+  "A monthly subscription — makers keep more of every sale with no per-transaction commissions",
   "Our founder personally travels to discover makers — city by city, market by market, studio by studio",
 ];
 
@@ -176,7 +177,7 @@ export default async function Home() {
           <img
             src="/landing.png"
             alt="UpSycle Market — Created By US, Treasured by You"
-            className="mb-3 w-[clamp(240px,40vw,420px)] h-auto"
+            className="mb-3 h-auto w-[clamp(148px,22vw,240px)]"
           />
           <p className="mb-12 text-[0.65rem] font-medium tracking-[0.22em] uppercase text-[var(--rg-core)] opacity-85">
             Handmade &nbsp;·&nbsp; Upcycled &nbsp;·&nbsp; Sustainable
@@ -359,14 +360,57 @@ export default async function Home() {
                 <p className="mb-7 text-[0.88rem] font-light leading-loose text-[var(--muted2)]">
                   {card.desc}
                 </p>
-                <div className="flex items-baseline gap-2 border-t border-[var(--border)] pt-5">
-                  <span className="grad-text font-serif text-[1.9rem] font-semibold leading-none">
-                    {card.feeAmount}
-                  </span>
-                  <span className="text-[0.7rem] text-[var(--muted)]">{card.feeLabel}</span>
-                </div>
+                {card.num === "02" ? (
+                  <div className="border-t border-[var(--border)] pt-5">
+                    <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1">
+                      {SELLER_TIER_OPTIONS.map((tier) => (
+                        <span key={tier.value} className="flex items-baseline gap-1.5">
+                          <span className="grad-text font-serif text-[1.35rem] font-semibold leading-none">
+                            {tier.monthlyPrice}
+                          </span>
+                          <span className="text-[0.62rem] uppercase tracking-[0.08em] text-[var(--muted)]">
+                            {tier.label}
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                    <span className="text-[0.7rem] text-[var(--muted)]">{card.feeLabel}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-baseline gap-2 border-t border-[var(--border)] pt-5">
+                    <span className="grad-text font-serif text-[1.9rem] font-semibold leading-none">
+                      {card.feeAmount}
+                    </span>
+                    <span className="text-[0.7rem] text-[var(--muted)]">{card.feeLabel}</span>
+                  </div>
+                )}
               </div>
             ))}
+          </div>
+
+          <div id="pricing" className="mt-12 border border-[var(--border)] bg-[var(--charcoal)] p-8 md:p-10">
+            <div className="eyebrow">Seller pricing</div>
+            <h3 className="mb-3 font-serif text-[clamp(1.6rem,2.4vw,2.2rem)] font-normal leading-tight text-[var(--cream)]">
+              Three monthly <span className="grad-text">tiers</span>
+            </h3>
+            <p className="mb-8 max-w-2xl text-[0.9rem] font-light leading-relaxed text-[var(--muted2)]">
+              {SELLER_TIER_VISIBILITY_COPY} There is no per-sale commission.
+            </p>
+            <div className="grid grid-cols-1 gap-px bg-[var(--border)] md:grid-cols-3">
+              {SELLER_TIER_OPTIONS.map((tier) => (
+                <div key={tier.value} className="bg-[var(--deep)] p-6">
+                  <div className="mb-2 text-[0.6rem] font-semibold uppercase tracking-[0.22em] text-[var(--rg-core)]">
+                    {tier.label}
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="grad-text font-serif text-[2.2rem] font-semibold leading-none">
+                      {tier.monthlyPrice}
+                    </span>
+                    <span className="text-[0.7rem] text-[var(--muted)]">per month</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>

@@ -25,13 +25,6 @@ export default function AcceptableUsePage() {
       title="Acceptable Use Policy"
       effectiveDate="August 25, 2026"
       lastUpdated="August 25, 2026"
-      disclaimer={
-        <>
-          This page reflects UpSycle Market&rsquo;s current Acceptable Use Policy, including our
-          real entity and contact details. It is still not legal advice &mdash; have an attorney
-          review it before you rely on it.
-        </>
-      }
       toc={toc}
     >
       <LegalSection id="scope" num="01" title="Scope of This Policy">

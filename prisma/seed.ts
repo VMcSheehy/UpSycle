@@ -23,9 +23,10 @@ const prisma = new PrismaClient();
 // hand-written data backfill (that migration seeds these same values via raw
 // SQL for the existing prod DB) — kept in sync so a fresh `migrate reset &&
 // db seed` on a new dev DB reaches the same state without going through that
-// migration's INSERT statements. Tier 2/3 are placeholder-zero benefits with
-// isPricingFinalized: false because Prompts/Tier_system.md never defines
-// them — see the TierPlan model comment in schema.prisma.
+// migration's INSERT statements. Monthly prices are final for all three
+// tiers ($39.99 / $29.99 / $19.99). Benefit columns that were never specified
+// are left as they are; public copy does not invent perks from those zeros.
+// See the TierPlan model comment in schema.prisma.
 const TIER_PLANS = [
   {
     tier: SellerTier.TIER_1,
@@ -47,7 +48,7 @@ const TIER_PLANS = [
     socialPostsPerPeriod: 0,
     canHighlightProducts: false,
     searchRankWeight: 0,
-    isPricingFinalized: false,
+    isPricingFinalized: true,
   },
   {
     tier: SellerTier.TIER_3,
@@ -58,7 +59,7 @@ const TIER_PLANS = [
     socialPostsPerPeriod: 0,
     canHighlightProducts: false,
     searchRankWeight: 0,
-    isPricingFinalized: false,
+    isPricingFinalized: true,
   },
 ];
 

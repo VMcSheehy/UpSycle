@@ -17,13 +17,6 @@ export default function DisclaimerPage() {
       title="Disclaimer"
       effectiveDate="August 25, 2026"
       lastUpdated="August 25, 2026"
-      disclaimer={
-        <>
-          This page reflects UpSycle Market&rsquo;s current Disclaimer, including our real entity
-          and contact details. It is still not legal advice &mdash; have an attorney review it
-          before you rely on it.
-        </>
-      }
       toc={toc}
     >
       <LegalSection id="website" num="01" title="Website Disclaimer">
