@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SELLER_TIER_OPTIONS, SELLER_TIER_VISIBILITY_COPY } from "@/lib/seller-tiers";
+import { SUPPORT_EMAIL } from "@/lib/support-email";
 
 export const metadata: Metadata = {
   title: "FAQ — UpSycle Market",
@@ -43,15 +44,10 @@ export default function FaqPage() {
                 <h2 className={questionClass}>How do I buy something?</h2>
                 <p className={answerClass}>
                   Browse the market, open a listing, and add it to your cart. Checkout asks you to
-                  sign in. The terms say prices are in US dollars, and sales tax is added when it
-                  is required. Payments are processed by Stripe. The terms list Visa, Mastercard,
-                  American Express, and Discover.
-                </p>
-              </div>
-              <div>
-                <h2 className={questionClass}>Is there a buyer fee?</h2>
-                <p className={answerClass}>
-                  The homepage says buyers pay a 6% service fee at checkout.
+                  sign in. You pay the price on the listing, plus the seller&apos;s shipping. There
+                  is no extra buyer service fee. The terms say prices are in US dollars, and sales
+                  tax is added when it is required. Payments are processed by Stripe. The terms
+                  list Visa, Mastercard, American Express, and Discover.
                 </p>
               </div>
             </div>
@@ -90,8 +86,8 @@ export default function FaqPage() {
                   The return policy says returns must be postmarked within seven days of the
                   purchase date, and items must be unused with the original tags and labels
                   attached. Email{" "}
-                  <a className="text-[var(--rg-light)] underline" href="mailto:vmcsheehy@upsyclemarket.com">
-                    vmcsheehy@upsyclemarket.com
+                  <a className="text-[var(--rg-light)] underline" href={`mailto:${SUPPORT_EMAIL}`}>
+                    {SUPPORT_EMAIL}
                   </a>{" "}
                   for a return authorization number, then mail the package to UpSycle Market LLC,
                   Attn: Returns, 3020 Alta Vista Dr, Fallbrook, CA 92028, and include that number.
@@ -168,8 +164,8 @@ export default function FaqPage() {
                   The terms say a subscription renews each month until you cancel it. You can
                   cancel from your account, and the cancellation takes effect at the end of the
                   current paid term. Questions about a subscription can be emailed to{" "}
-                  <a className="text-[var(--rg-light)] underline" href="mailto:vmcsheehy@upsyclemarket.com">
-                    vmcsheehy@upsyclemarket.com
+                  <a className="text-[var(--rg-light)] underline" href={`mailto:${SUPPORT_EMAIL}`}>
+                    {SUPPORT_EMAIL}
                   </a>
                   . The terms also say subscription fees can change, and that any change will be
                   communicated as the law requires.

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { SUPPORT_EMAIL } from "@/lib/support-email";
 
-export const SUPPORT_EMAIL = "support@upsyclemarket.com";
+export { SUPPORT_EMAIL };
 
 export default function ContactForm() {
   const [name, setName] = useState("");
