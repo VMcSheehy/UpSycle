@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { SellerTier } from "@prisma/client";
+import { SELLER_TIER_OPTIONS, SELLER_TIER_VISIBILITY_COPY } from "@/lib/seller-tiers";
 import {
   type AddressInput,
   MAX_STORY_LENGTH,
@@ -10,15 +11,6 @@ import {
   type SellerSignupInput,
   validateSellerSignup,
 } from "@/lib/validation/sellerSignup";
-
-const SELLER_TIER_PLACEHOLDER =
-  "Benefits and pricing for this tier are still being finalized — you'll be notified before anything changes.";
-
-const SELLER_TIERS: { value: SellerTier; label: string }[] = [
-  { value: "TIER_1", label: "Tier 1" },
-  { value: "TIER_2", label: "Tier 2" },
-  { value: "TIER_3", label: "Tier 3" },
-];
 
 interface PhotoSlot {
   file: File | null;
@@ -72,7 +64,6 @@ export default function SellerSignupForm({ existingAccount }: SellerSignupFormPr
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [socialMediaUrls, setSocialMediaUrls] = useState<string[]>([""]);
   const [expectedMonthlySales, setExpectedMonthlySales] = useState("");
-  const [supplierList, setSupplierList] = useState<string[]>([""]);
   const [tier, setTier] = useState<SellerTier>("TIER_1");
   const [referralEmail, setReferralEmail] = useState("");
 
@@ -200,7 +191,6 @@ export default function SellerSignupForm({ existingAccount }: SellerSignupFormPr
       websiteUrl: websiteUrl.trim() || undefined,
       socialMediaUrls: socialMediaUrls.map((s) => s.trim()).filter(Boolean),
       expectedMonthlySales: Number.parseInt(expectedMonthlySales, 10),
-      supplierList: supplierList.map((s) => s.trim()).filter(Boolean),
       tier,
       referralEmail: referralEmail.trim() || undefined,
       samplePhotoUrls: photos.map((p) => p.uploadedUrl ?? ""),
@@ -484,52 +474,17 @@ export default function SellerSignupForm({ existingAccount }: SellerSignupFormPr
           />
         </div>
 
-        <div>
-          <label className={labelClass}>Supplier List *</label>
-          <p className="mb-2 text-[0.78rem] font-light text-[var(--muted2)]">
-            Where do you source your raw or upcycled materials? e.g. &ldquo;Home Depot&rdquo;,
-            &ldquo;Hobby Lobby&rdquo;, local salvage yards.
-          </p>
-          <div className="flex flex-col gap-2">
-            {supplierList.map((supplier, index) => (
-              <div key={index} className="flex gap-2">
-                <input
-                  type="text"
-                  className={inputClass}
-                  value={supplier}
-                  onChange={(e) => updateListItem(setSupplierList, index, e.target.value)}
-                  placeholder="Supplier name"
-                />
-                <button
-                  type="button"
-                  className={removeBtnClass}
-                  onClick={() => removeListItem(setSupplierList, index)}
-                  aria-label="Remove supplier"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-          <button
-            type="button"
-            className={`${addLinkClass} mt-2`}
-            onClick={() => addListItem(setSupplierList)}
-          >
-            + Add another supplier
-          </button>
-        </div>
       </div>
 
       {/* SELLER TIER */}
       <div className={sectionClass}>
         <h2 className={sectionHeadingClass}>Seller Tier</h2>
         <p className="mb-4 text-[0.78rem] font-light text-[var(--muted2)]">
-          Choose the tier you&apos;d like to apply under. Pricing and benefits for each tier are
-          still being finalized.
+          Choose the tier you&apos;d like to apply under. Tier 1 is $39.99 per month, Tier 2 is
+          $29.99 per month, and Tier 3 is $19.99 per month. {SELLER_TIER_VISIBILITY_COPY}
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {SELLER_TIERS.map((option) => (
+          {SELLER_TIER_OPTIONS.map((option) => (
             <label
               key={option.value}
               className={`flex cursor-pointer flex-col gap-2 border p-4 transition-colors ${
@@ -550,7 +505,7 @@ export default function SellerSignupForm({ existingAccount }: SellerSignupFormPr
                 <span className="text-sm font-medium text-[var(--cream)]">{option.label}</span>
               </div>
               <p className="text-[0.78rem] font-light text-[var(--muted2)]">
-                {SELLER_TIER_PLACEHOLDER}
+                {option.monthlyPrice} per month
               </p>
             </label>
           ))}

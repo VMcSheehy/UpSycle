@@ -25,13 +25,6 @@ export default function AcceptableUsePage() {
       title="Acceptable Use Policy"
       effectiveDate="August 25, 2026"
       lastUpdated="August 25, 2026"
-      disclaimer={
-        <>
-          This page reflects UpSycle Market&rsquo;s current Acceptable Use Policy, including our
-          real entity and contact details. It is still not legal advice &mdash; have an attorney
-          review it before you rely on it.
-        </>
-      }
       toc={toc}
     >
       <LegalSection id="scope" num="01" title="Scope of This Policy">
@@ -240,12 +233,12 @@ export default function AcceptableUsePage() {
         <ul>
           <li>
             breaches this Policy, please email us at{" "}
-            <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a> to let us
+            <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a> to let us
             know which Service, Content, or Contribution is in breach of this Policy and why;
           </li>
           <li>
             infringes any third-party intellectual property rights, please email us at{" "}
-            <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a>.
+            <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a>.
           </li>
         </ul>
         <p>We will reasonably determine whether a Service, Content, or Contribution breaches this Policy.</p>
@@ -297,7 +290,7 @@ export default function AcceptableUsePage() {
           or Contribution, you may contact us by:
         </p>
         <p>
-          Email: <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a>
+          Email: <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a>
           <br />
           Phone: (760) 695-2784
         </p>

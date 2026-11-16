@@ -14,7 +14,7 @@
 // This schema stores only a Cognito user id (`cognitoSub`) on User — no password field.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // "native" covers the App Runner Docker build (infra/lib/stacks/apprunner-stack.ts
   // + Dockerfile: `prisma generate` runs inside the same build stage/base image the
   // app actually runs in, so no cross-platform mismatch there — see git history for
@@ -117,11 +117,12 @@ enum SellerTier {
 // every tier-gated behavior (billing price, benefit copy, search rank boost)
 // reads these columns, so pricing/benefits can be corrected later (Prisma
 // Studio, a raw UPDATE, or a future admin editor) with zero redeploy.
-// Tier 2/3 ship with all benefit fields zeroed/null and isPricingFinalized =
-// false because Prompts/Tier_system.md never defines them — code that
-// presents tier benefits/pricing as final (seller portal copy, search
-// ranking weight) must check isPricingFinalized rather than assume these
-// placeholder zeros are real product decisions.
+// Public monthly prices are final: Tier 1 $39.99, Tier 2 $29.99, Tier 3
+// $19.99 (monthlyPriceCents 3999 / 2999 / 1999), and isPricingFinalized is
+// true for all three. Benefit columns that were never specified stay at
+// their existing values. Public pages do not treat those columns as a
+// published perk list — they say higher tiers get more visibility in search
+// and featured placements.
 model TierPlan {
   id                        String     @id @default(uuid())
   tier                      SellerTier @unique
@@ -222,7 +223,11 @@ model SellerProfile {
   websiteUrl           String?
   socialMediaUrls      String[] // multiple social accounts allowed
   expectedMonthlySales Int? // expected volume of sales per month
-  supplierList         String[] // e.g. "Home Depot", "Hobby Lobby"
+  // Kept so existing applications are not lost. No longer collected on the
+  // signup form, required by validation, or shown on the admin review page.
+  // The original column is already nullable in Postgres (no NOT NULL). New
+  // rows default to an empty list when the applicant does not supply one.
+  supplierList         String[]             @default([])
   approvalStatus       SellerApprovalStatus @default(PENDING)
   // Denormalized read cache of SellerSubscription.tierPlan.tier — kept in
   // sync (same transaction) by lib/seller-billing.ts's applyTierChange on

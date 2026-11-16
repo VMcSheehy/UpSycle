@@ -107,7 +107,7 @@ async function attachSellerToExistingUser(userId: string, input: SellerSignupInp
           websiteUrl: input.websiteUrl?.trim() || null,
           socialMediaUrls: input.socialMediaUrls.filter((u) => u.trim()),
           expectedMonthlySales: input.expectedMonthlySales,
-          supplierList: input.supplierList.filter((s) => s.trim()),
+          supplierList: (input.supplierList ?? []).filter((s) => s.trim()),
           tier: input.tier,
           approvalStatus: "PENDING",
           samplePhotos: {
@@ -199,7 +199,7 @@ async function createNewSellerAccount(input: SellerSignupInput) {
           websiteUrl: input.websiteUrl?.trim() || null,
           socialMediaUrls: input.socialMediaUrls.filter((u) => u.trim()),
           expectedMonthlySales: input.expectedMonthlySales,
-          supplierList: input.supplierList.filter((s) => s.trim()),
+          supplierList: (input.supplierList ?? []).filter((s) => s.trim()),
           tier: input.tier,
           approvalStatus: "PENDING",
           samplePhotos: {

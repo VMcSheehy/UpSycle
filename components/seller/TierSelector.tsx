@@ -2,18 +2,13 @@
 
 import { useState } from "react";
 import type { SellerTier } from "@prisma/client";
+import { SELLER_TIER_OPTIONS, SELLER_TIER_VISIBILITY_COPY } from "@/lib/seller-tiers";
 
 const labelClass =
   "mb-2 block text-[0.65rem] font-medium tracking-[0.13em] uppercase text-[var(--muted)]";
 
-const TIER_OPTIONS: { value: SellerTier; label: string }[] = [
-  { value: "TIER_1", label: "Tier 1" },
-  { value: "TIER_2", label: "Tier 2" },
-  { value: "TIER_3", label: "Tier 3" },
-];
-
 function tierLabel(tier: SellerTier): string {
-  return TIER_OPTIONS.find((option) => option.value === tier)?.label ?? tier;
+  return SELLER_TIER_OPTIONS.find((option) => option.value === tier)?.label ?? tier;
 }
 
 export default function TierSelector({ initialTier }: { initialTier: SellerTier }) {
@@ -55,29 +50,32 @@ export default function TierSelector({ initialTier }: { initialTier: SellerTier 
       </p>
 
       <div className="mt-4 space-y-3">
-        {TIER_OPTIONS.map((option) => (
+        {SELLER_TIER_OPTIONS.map((option) => (
           <label
             key={option.value}
-            className="flex cursor-pointer items-center gap-3 border border-[var(--border)] bg-[var(--panel2)] px-4 py-3 text-sm text-[var(--cream)] transition-colors has-[:checked]:border-[var(--rg-core)]"
+            className="flex cursor-pointer items-center justify-between gap-3 border border-[var(--border)] bg-[var(--panel2)] px-4 py-3 text-sm text-[var(--cream)] transition-colors has-[:checked]:border-[var(--rg-core)]"
           >
-            <input
-              type="radio"
-              name="seller-tier"
-              value={option.value}
-              checked={tier === option.value}
-              onChange={() => {
-                setTier(option.value);
-                setSuccess(false);
-              }}
-            />
-            {option.label}
+            <span className="flex items-center gap-3">
+              <input
+                type="radio"
+                name="seller-tier"
+                value={option.value}
+                checked={tier === option.value}
+                onChange={() => {
+                  setTier(option.value);
+                  setSuccess(false);
+                }}
+              />
+              {option.label}
+            </span>
+            <span className="text-[var(--rg-light)]">{option.monthlyPrice}/mo</span>
           </label>
         ))}
       </div>
 
-      <p className="mt-4 text-[0.75rem] font-light italic text-[var(--muted2)]">
-        Pricing, benefits, and billing for each tier are still being finalized. Changing your
-        tier here has no billing effect yet.
+      <p className="mt-4 text-[0.75rem] font-light text-[var(--muted2)]">
+        Tier 1 is $39.99 per month, Tier 2 is $29.99 per month, and Tier 3 is $19.99 per month.{" "}
+        {SELLER_TIER_VISIBILITY_COPY}
       </p>
 
       <div className="mt-3 flex items-center gap-4">

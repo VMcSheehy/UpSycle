@@ -26,16 +26,17 @@ export interface SellerSignupInput {
   websiteUrl?: string;
   socialMediaUrls: string[];
   expectedMonthlySales: number;
-  supplierList: string[];
+  // No longer collected. Optional so an older client that still sends it is
+  // not rejected; an empty or missing list is valid.
+  supplierList?: string[];
   referralEmail?: string;
   samplePhotoUrls: string[];
   // Optional paragraph shown on the seller's public storefront page once
   // approved. Also editable later from the seller dashboard (see
   // app/api/sellers/profile/route.ts) — not required at application time.
   story?: string;
-  // Seller-selected pricing tier. Pricing/benefits per tier and payment
-  // processing are still undecided — this only captures the applicant's
-  // choice for later use.
+  // Seller-selected pricing tier. Public prices are Tier 1 $39.99/mo,
+  // Tier 2 $29.99/mo, and Tier 3 $19.99/mo.
   tier?: SellerTier;
 }
 
@@ -104,11 +105,6 @@ export function validateSellerSignup(
     input.expectedMonthlySales <= 0
   ) {
     errors.push("Expected monthly sales must be a positive whole number.");
-  }
-
-  const supplierList = (input.supplierList ?? []).filter((s) => s.trim());
-  if (supplierList.length === 0) {
-    errors.push("At least one supplier is required.");
   }
 
   if (

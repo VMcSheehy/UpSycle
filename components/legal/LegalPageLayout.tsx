@@ -10,12 +10,12 @@ interface LegalPageLayoutProps {
   title: string;
   effectiveDate: ReactNode;
   lastUpdated: ReactNode;
-  disclaimer: ReactNode;
+  disclaimer?: ReactNode;
   toc: LegalTocItem[];
   children: ReactNode;
 }
 
-/** Shared chrome for /privacy and /terms — header, disclaimer callout, and a
+/** Shared chrome for the policy pages — header, optional note, and a
  * table-of-contents + numbered-sections layout, styled with the `.legal-*`
  * classes in globals.css. */
 export default function LegalPageLayout({
@@ -36,9 +36,7 @@ export default function LegalPageLayout({
           <p className="legal-meta">
             Effective date: {effectiveDate} &middot; Last updated: {lastUpdated}
           </p>
-          <div className="legal-disclaimer">
-            <strong>Template notice.</strong> {disclaimer}
-          </div>
+          {disclaimer ? <div className="legal-disclaimer">{disclaimer}</div> : null}
         </div>
 
         <div className="legal-layout">
