@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getActivePlacementPeriod, resolveFeaturedProduct } from "@/lib/placement";
@@ -172,12 +173,19 @@ export default async function Home() {
         />
 
         <div className="relative z-[2] flex flex-col items-center">
-          {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset in /public, no next/image config yet */}
-          <img
-            src="/landing.png"
-            alt="UpSycle Market — Created By US, Treasured by You"
-            className="mb-3 w-[clamp(240px,40vw,420px)] h-auto"
+          <Image
+            src="/brand/logo-full.webp"
+            alt="UpSycle Market"
+            width={715}
+            height={720}
+            priority
+            quality={90}
+            sizes="(max-width: 768px) 68vw, 300px"
+            className="mb-5 h-auto w-[min(68vw,300px)]"
           />
+          <p className="mb-4 text-[0.84rem] font-light tracking-[0.08em] text-[var(--cream)]">
+            A marketplace supporting only independent artists
+          </p>
           <p className="mb-12 text-[0.65rem] font-medium tracking-[0.22em] uppercase text-[var(--rg-core)] opacity-85">
             Handmade &nbsp;·&nbsp; Upcycled &nbsp;·&nbsp; Sustainable
           </p>
@@ -444,6 +452,15 @@ export default async function Home() {
           &ldquo;
         </span>
         <div className="sec-max relative z-[2] mx-auto max-w-[860px]">
+          <Image
+            src="/brand/banner.webp"
+            alt="UpSycle Market"
+            width={851}
+            height={315}
+            quality={90}
+            sizes="(max-width: 900px) 100vw, 851px"
+            className="mx-auto mb-12 h-auto w-full max-w-[851px]"
+          />
           <div className="eyebrow" style={{ color: "var(--rg-light)" }}>
             Our Story
           </div>

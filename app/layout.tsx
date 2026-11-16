@@ -19,10 +19,40 @@ const montserrat = Montserrat({
   display: "swap",
 });
 
+const description =
+  "A marketplace for handmade and upcycled goods. Discover one-of-a-kind pieces from independent artists, or open your own shop.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL("https://www.upsyclemarket.com"),
   title: "UpSycle Market — Created By US, Treasured By You",
-  description:
-    "A marketplace for handmade and upcycled goods. Discover one-of-a-kind pieces from independent artists, or open your own shop.",
+  description,
+  openGraph: {
+    title: "UpSycle Market — Created By US, Treasured By You",
+    description,
+    siteName: "UpSycle Market",
+    type: "website",
+    images: [
+      {
+        url: "/og.png",
+        width: 1200,
+        height: 630,
+        alt: "UpSycle Market",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "UpSycle Market — Created By US, Treasured By You",
+    description,
+    images: [
+      {
+        url: "/og.png",
+        width: 1200,
+        height: 630,
+        alt: "UpSycle Market",
+      },
+    ],
+  },
 };
 
 export default function RootLayout({

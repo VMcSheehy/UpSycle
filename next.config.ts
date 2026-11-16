@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Logos use quality 90 so the small wordmark and tagline stay sharp.
+  // Next.js only allows qualities listed here (75 is the default).
+  images: {
+    qualities: [75, 90],
+  },
+
   // Standalone output produces a minimal, self-contained server bundle
   // (only the files actually needed at runtime, with a pruned
   // node_modules) — the standard shape for a Docker-deployed Next.js app,

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import CategoryNav from "@/components/CategoryNav";
 import CartBadge from "@/components/cart/CartBadge";
@@ -20,11 +21,26 @@ export default async function Header() {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-[200] flex items-center justify-between px-6 py-4 md:px-14 lg:px-20 xl:px-28 bg-[rgba(3,3,3,0.94)] backdrop-blur-[14px] border-b border-[var(--border)]">
-      <Link href="/" className="flex items-center gap-3 no-underline">
-        {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset in /public, no next/image config yet */}
-        <img src="/iconmark.png" alt="" aria-hidden="true" className="h-8 w-auto shrink-0" />
-        {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset in /public, no next/image config yet */}
-        <img src="/wordmark.png" alt="UpSycle Market" className="h-7 w-auto" />
+      <Link href="/" className="flex shrink-0 items-center gap-2.5 no-underline md:gap-3">
+        <Image
+          src="/brand/mark.webp"
+          alt="UpSycle Market"
+          width={880}
+          height={721}
+          priority
+          quality={90}
+          sizes="(min-width: 768px) 52px, 36px"
+          className="h-9 w-auto md:h-[52px]"
+        />
+        <Image
+          src="/brand/wordmark.webp"
+          alt=""
+          width={960}
+          height={340}
+          quality={90}
+          sizes="96px"
+          className="hidden h-7 w-auto md:block"
+        />
       </Link>
       <ul className="flex items-center gap-7 list-none">
         <li className="hidden md:block">

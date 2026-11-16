@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 const footerCols = [
@@ -40,20 +41,18 @@ export default function Footer() {
     <footer className="bg-[var(--black)] border-t border-[var(--border)] px-6 pt-12 pb-8 md:px-14">
       <div className="flex flex-wrap items-start justify-between gap-8 mb-9">
         <div>
-          <span className="relative block w-14 h-[46px]" aria-hidden="true">
-            <span className="grad-text absolute top-0 left-0 font-serif text-[2.6rem] font-light leading-[0.85]">
-              U
-            </span>
-            <span className="grad-text absolute bottom-0 right-0 font-serif text-[2.6rem] font-light leading-[0.85] opacity-95">
-              S
-            </span>
-          </span>
-          <div className="font-serif text-[1.05rem] text-[var(--cream)] mt-2">
-            <span className="grad-text">Up</span>Sycle Market
-          </div>
-          <div className="text-[0.58rem] tracking-[0.17em] uppercase text-[var(--rg-core)] opacity-60 mt-1">
-            Created By US, Treasured by You
-          </div>
+          <Image
+            src="/brand/lockup.webp"
+            alt="UpSycle Market"
+            width={480}
+            height={430}
+            quality={90}
+            sizes="140px"
+            className="h-auto w-[140px]"
+          />
+          <p className="mt-3 text-[0.72rem] tracking-[0.06em] text-[var(--rg-core)]">
+            Created By US, Treasured By You
+          </p>
         </div>
         <div className="flex flex-wrap gap-12">
           {footerCols.map((col) => (
