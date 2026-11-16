@@ -66,6 +66,7 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
   const categoryIds = [category.id, ...category.children.map((c) => c.id)];
   const standardWhere = {
     categoryId: { in: categoryIds },
+    sellerProfile: { approvalStatus: "APPROVED" as const },
     ...(shownProductIds.size > 0 ? { id: { notIn: Array.from(shownProductIds) } } : {}),
   };
 

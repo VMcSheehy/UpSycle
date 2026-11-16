@@ -1,23 +1,24 @@
-// Issues a presigned S3 PUT URL for a single seller sample-photo upload.
-// The client uploads the file bytes directly to S3 using the returned
-// `uploadUrl`, then submits the returned `fileUrl` to /api/sellers/signup.
+// Issues a presigned S3 POST for one upload. The browser posts the file
+// directly to S3, then sends the returned fileUrl to the signup or product API.
 //
-// Cannot be statically rendered/prerendered — it calls out to AWS on every
-// request.
+// Product photos (public bucket) require an approved seller. Vetting files
+// (sample photos and proof of handcrafted) require a signed-in user, who may
+// still be an applicant. Keys are scoped to that user, content types are
+// limited, and S3 rejects anything over 10 MB.
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/current-user";
 import { createPresignedUpload } from "@/lib/s3";
-
-const ALLOWED_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp"];
-
-// Distinct S3 key prefixes for each upload use case, all in the same
-// PHOTOS_BUCKET_NAME bucket (see lib/s3.ts / .env.example — a second bucket
-// isn't warranted for MVP). Defaults to the original seller-sample-photos
-// prefix so existing callers (SellerSignupForm) that don't pass keyPrefix are
-// unaffected.
-const ALLOWED_KEY_PREFIXES = ["seller-sample-photos", "product-photos", "proof-of-handcrafted"] as const;
-type KeyPrefix = (typeof ALLOWED_KEY_PREFIXES)[number];
+import { resolveSellerAuth } from "@/lib/seller-auth";
+import {
+  allowedContentTypes,
+  authorizeUploadRequest,
+  extensionForContentType,
+  isUploadPrefix,
+  type UploadPrefix,
+} from "@/lib/upload-policy";
 
 export async function POST(request: NextRequest) {
   let body: unknown;
@@ -37,26 +38,48 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "fileName is required." }, { status: 400 });
   }
 
-  if (typeof contentType !== "string" || !ALLOWED_CONTENT_TYPES.includes(contentType)) {
+  const resolvedPrefix: UploadPrefix = keyPrefix === undefined ? "seller-sample-photos" : (keyPrefix as UploadPrefix);
+  if (typeof keyPrefix === "string" && !isUploadPrefix(keyPrefix)) {
     return NextResponse.json(
-      { error: `contentType must be one of: ${ALLOWED_CONTENT_TYPES.join(", ")}.` },
+      { error: "keyPrefix must be one of: seller-sample-photos, product-photos, proof-of-handcrafted." },
+      { status: 400 },
+    );
+  }
+  if (keyPrefix !== undefined && typeof keyPrefix !== "string") {
+    return NextResponse.json({ error: "keyPrefix must be a string." }, { status: 400 });
+  }
+
+  const user = await getCurrentUser();
+  let isApprovedSeller = false;
+  if (user && resolvedPrefix === "product-photos") {
+    const auth = await resolveSellerAuth();
+    isApprovedSeller = auth.ok;
+  }
+
+  const decision = authorizeUploadRequest({
+    userId: user?.id ?? null,
+    isApprovedSeller,
+    keyPrefix: resolvedPrefix,
+  });
+  if (!decision.ok) {
+    return NextResponse.json({ error: decision.error }, { status: decision.status });
+  }
+
+  const allowed = allowedContentTypes(resolvedPrefix);
+  if (typeof contentType !== "string" || !allowed.includes(contentType)) {
+    return NextResponse.json(
+      { error: `contentType must be one of: ${allowed.join(", ")}.` },
       { status: 400 },
     );
   }
 
-  let resolvedPrefix: KeyPrefix = "seller-sample-photos";
-  if (keyPrefix !== undefined) {
-    if (typeof keyPrefix !== "string" || !ALLOWED_KEY_PREFIXES.includes(keyPrefix as KeyPrefix)) {
-      return NextResponse.json(
-        { error: `keyPrefix must be one of: ${ALLOWED_KEY_PREFIXES.join(", ")}.` },
-        { status: 400 },
-      );
-    }
-    resolvedPrefix = keyPrefix as KeyPrefix;
+  const extension = extensionForContentType(contentType);
+  if (!extension) {
+    return NextResponse.json({ error: "That file type is not allowed." }, { status: 400 });
   }
 
   try {
-    const presigned = await createPresignedUpload(fileName, contentType, resolvedPrefix);
+    const presigned = await createPresignedUpload(contentType, extension, resolvedPrefix, decision.userId);
     return NextResponse.json(presigned);
   } catch (err) {
     console.error("Failed to create presigned upload URL:", err);

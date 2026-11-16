@@ -43,6 +43,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Next.js + Prisma Docker deployments) — copy it explicitly to be sure.
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+# prisma migrate deploy runs on boot (private RDS is not reachable from GitHub Actions).
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/start-server.sh ./scripts/start-server.sh
 
 USER nextjs
 EXPOSE 3000
@@ -59,4 +63,4 @@ ENV HOSTNAME="0.0.0.0"
 # again directly in CMD's shell invocation takes precedence over anything
 # inherited from the platform, since it's set at the exact moment the
 # process starts rather than baked into the image's base environment.
-CMD ["sh", "-c", "HOSTNAME=0.0.0.0 node server.js"]
+CMD ["sh", "./scripts/start-server.sh"]

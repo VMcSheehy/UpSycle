@@ -44,18 +44,38 @@ const env: cdk.Environment = {
 };
 
 const domainName = app.node.tryGetContext("domainName") ?? "UpSycleMarket.com";
-const githubOwner = app.node.tryGetContext("githubOwner") ?? "donfouts";
+const githubOwner = app.node.tryGetContext("githubOwner") ?? "VMcSheehy";
 const githubRepo = app.node.tryGetContext("githubRepo") ?? "UpSycle";
+const stripeSecretKeyName = app.node.tryGetContext("stripeSecretKeyName") ?? "upsycle/stripe/secret-key";
+const stripeWebhookSecretName =
+  app.node.tryGetContext("stripeWebhookSecretName") ?? "upsycle/stripe/webhook-secret";
+const stage = String(app.node.tryGetContext("stage") ?? "prod");
+
+function contextBoolean(key: string, fallback: boolean): boolean {
+  const raw = app.node.tryGetContext(key);
+  if (raw === undefined || raw === null || raw === "") return fallback;
+  if (typeof raw === "boolean") return raw;
+  const text = String(raw).toLowerCase();
+  if (text === "true" || text === "1") return true;
+  if (text === "false" || text === "0") return false;
+  return fallback;
+}
+
+// Multi-AZ is on for production. `-c stage=dev` or `-c multiAz=false` turns it off.
+const multiAz = contextBoolean("multiAz", stage === "prod");
 
 const networkStack = new NetworkStack(app, "UpSycle-NetworkStack", {
   env,
-  description: "UpSycle: VPC (RDS-only private subnet, no NAT Gateway) + S3 Gateway VPC Endpoint",
+  description: "UpSycle: VPC with one NAT, private subnets for App Runner, isolated subnets for RDS",
 });
 
 const dataStack = new DataStack(app, "UpSycle-DataStack", {
   env,
-  description: "UpSycle: RDS PostgreSQL (db.t4g.micro, single-AZ) in NetworkStack's private subnet",
+  description: "UpSycle: private RDS PostgreSQL (db.t4g.micro), Multi-AZ when stage is prod",
   vpc: networkStack.vpc,
+  appRunnerConnectorSecurityGroup: networkStack.appRunnerConnectorSecurityGroup,
+  placementLambdaSecurityGroup: networkStack.placementLambdaSecurityGroup,
+  multiAz,
 });
 dataStack.addDependency(networkStack);
 
@@ -63,6 +83,8 @@ const placementStack = new PlacementStack(app, "UpSycle-PlacementStack", {
   env,
   description: "UpSycle: Lambda + EventBridge cron running the weekly Home/Category/Sub-Category featured-placement lottery draw (Saturday) and finalize (Sunday 00:00 UTC)",
   dbSecret: dataStack.dbSecret,
+  vpc: networkStack.vpc,
+  placementLambdaSecurityGroup: networkStack.placementLambdaSecurityGroup,
 });
 placementStack.addDependency(dataStack);
 
@@ -85,6 +107,8 @@ const emailStack = new EmailStack(app, "UpSycle-EmailStack", {
 const appRunnerStack = new AppRunnerStack(app, "UpSycle-AppRunnerStack", {
   env,
   description: "UpSycle: App Runner service running the Next.js app as a Docker container (replaces Amplify Hosting)",
+  vpc: networkStack.vpc,
+  appRunnerConnectorSecurityGroup: networkStack.appRunnerConnectorSecurityGroup,
   dbSecret: dataStack.dbSecret,
   userPoolId: authStack.userPool.userPoolId,
   userPoolClientId: authStack.userPoolClient.userPoolClientId,
@@ -92,6 +116,9 @@ const appRunnerStack = new AppRunnerStack(app, "UpSycle-AppRunnerStack", {
   productPhotosBucket: storageStack.productPhotosBucket,
   sellerVettingPhotosBucket: storageStack.sellerVettingPhotosBucket,
   productPhotosCdnDomain: storageStack.distribution.distributionDomainName,
+  stripeSecretKeyName,
+  stripeWebhookSecretName,
+  siteUrl: `https://${String(domainName).toLowerCase()}`,
 });
 appRunnerStack.addDependency(dataStack);
 appRunnerStack.addDependency(authStack);

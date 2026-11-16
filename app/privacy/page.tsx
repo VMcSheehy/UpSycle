@@ -68,7 +68,7 @@ export default function PrivacyPolicyPage() {
           how your personal information is processed. If you do not agree with our policies and
           practices, please do not use our Services. If you still have any questions or concerns,
           please contact us at{" "}
-          <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a>. This policy
+          <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a>. This policy
           should be read alongside our <Link href="/terms">Terms &amp; Conditions</Link>.
         </p>
 
@@ -312,7 +312,7 @@ export default function PrivacyPolicyPage() {
           deactivate the account and take reasonable measures to promptly delete such data from our
           records. If you become aware of any data we may have collected from children under age
           18, please contact us at{" "}
-          <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a>.
+          <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a>.
         </p>
       </LegalSection>
 
@@ -353,7 +353,7 @@ export default function PrivacyPolicyPage() {
         </p>
         <p>
           If you have questions or comments about your privacy rights, you may email us at{" "}
-          <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a>.
+          <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a>.
         </p>
       </LegalSection>
 
@@ -529,7 +529,7 @@ export default function PrivacyPolicyPage() {
         <h3>How to Exercise Your Rights</h3>
         <p>
           To exercise these rights, you can contact us by emailing us at{" "}
-          <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a> or by
+          <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a> or by
           referring to the contact details in <a href="#contact">Section 13</a>. Under certain US
           state data protection laws, you can designate an authorized agent to make a request on
           your behalf. We may deny a request from an authorized agent that does not submit proof
@@ -554,7 +554,7 @@ export default function PrivacyPolicyPage() {
         <p>
           Under certain US state data protection laws, if we decline to take action regarding your
           request, you may appeal our decision by emailing us at{" "}
-          <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a>. We will
+          <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a>. We will
           inform you in writing of any action taken or not taken in response to the appeal,
           including a written explanation of the reasons for the decisions. If your appeal is
           denied, you may submit a complaint to your state attorney general.
@@ -583,7 +583,7 @@ export default function PrivacyPolicyPage() {
           <br />
           United States
           <br />
-          <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a>
+          <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a>
         </p>
       </LegalSection>
 
