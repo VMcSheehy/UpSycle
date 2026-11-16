@@ -49,7 +49,7 @@ export default function ReturnPolicyPage() {
       <LegalSection id="process" num="03" title="Return Process">
         <p>
           To return an item, please email customer service at{" "}
-          <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a> to obtain a
+          <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a> to obtain a
           Return Merchandise Authorization (RMA) number. After receiving an RMA number, place the
           item securely in its original packaging, and mail your return to the following address:
         </p>
@@ -93,7 +93,7 @@ export default function ReturnPolicyPage() {
       <LegalSection id="contact" num="06" title="Questions">
         <p>
           If you have any questions concerning our return policy, please contact us at{" "}
-          <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a> or (760)
+          <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a> or (760)
           695-2784.
         </p>
       </LegalSection>

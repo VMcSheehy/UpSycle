@@ -71,6 +71,7 @@ model User {
 
   questionsAsked    ProductQuestion[] @relation("QuestionAsker")
   questionsAnswered ProductQuestion[] @relation("QuestionAnswerer")
+  pendingCheckouts  PendingCheckout[]
 
   @@map("users")
 }
@@ -446,7 +447,9 @@ model Order {
   // thing sellers update directly.
   shippingStatus   ShippingStatus @default(PENDING_SHIPMENT)
   totalAmountCents Int
-  stripePaymentId  String? // Stripe Connect payment intent/charge reference
+  // Unique so a retried Stripe webhook cannot insert a second order for the
+  // same charge. Nulls stay allowed (Postgres unique indexes permit them).
+  stripePaymentId  String? @unique
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -456,6 +459,39 @@ model Order {
   items           OrderItem[]
 
   @@map("orders")
+}
+
+enum PendingCheckoutStatus {
+  OPEN
+  FULFILLED
+  REFUNDED
+}
+
+// The buyer's validated cart, saved before Stripe Checkout starts. Session
+// metadata stores only this id. Stripe metadata values are capped at 500
+// characters, which is too small for a full cart and was the previous
+// (truncated) source of truth for the webhook.
+model PendingCheckout {
+  id                  String                @id @default(uuid())
+  buyerId             String
+  shippingAddressId   String?
+  totalAmountCents    Int
+  linesJson           Json
+  status              PendingCheckoutStatus @default(OPEN)
+  stripePaymentId     String?               @unique
+  // Cents that must be refunded for this charge (amount mismatch, or lines
+  // that could not be fulfilled). refundedAmountCents tracks what Stripe
+  // already accepted so a webhook retry finishes the refund without
+  // decrementing stock again.
+  refundDueCents      Int                   @default(0)
+  refundedAmountCents Int                   @default(0)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  buyer User @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  @@index([buyerId])
+  @@map("pending_checkouts")
 }
 
 // Line item — links an Order to a Product (and denormalizes the seller for querying
@@ -569,7 +605,7 @@ model FeaturedSlotPurchase {
   priceCents        Int
   isRandomFill      Boolean           @default(false) // true = system auto-filled an unsold slot at Sunday finalize, not a real purchase
   featuredProductId String? // cascade-assigned product when isRandomFill and the seller holds other placements this period; null = use their #1 marketingPriority product
-  stripePaymentId   String? // null when isRandomFill
+  stripePaymentId   String?           @unique // null when isRandomFill; unique so a retried webhook cannot insert two slots for one charge
   purchasedAt       DateTime          @default(now())
 
   period        PlacementPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)

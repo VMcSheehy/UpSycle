@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { uploadViaPresignedPost } from "@/lib/browser-upload";
+
 import { centsToDollarsInput, dollarsToCents } from "@/lib/format";
 import {
   MAX_PRODUCT_PHOTOS,
@@ -58,26 +60,8 @@ async function uploadFile(
   onError: (msg: string) => void,
 ) {
   try {
-    const presignRes = await fetch("/api/upload", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fileName: file.name, contentType: file.type, keyPrefix }),
-    });
-    const presignData = await presignRes.json().catch(() => ({}));
-    if (!presignRes.ok) {
-      throw new Error(presignData?.error ?? "Failed to get an upload URL.");
-    }
-
-    const putRes = await fetch(presignData.uploadUrl as string, {
-      method: "PUT",
-      headers: { "Content-Type": file.type },
-      body: file,
-    });
-    if (!putRes.ok) {
-      throw new Error("Upload to storage failed.");
-    }
-
-    onDone(presignData.fileUrl as string);
+    const fileUrl = await uploadViaPresignedPost(file, keyPrefix);
+    onDone(fileUrl);
   } catch (err) {
     onError(err instanceof Error ? err.message : "Upload failed.");
   }

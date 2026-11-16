@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { SellerTier } from "@prisma/client";
+import { uploadViaPresignedPost } from "@/lib/browser-upload";
 import {
   type AddressInput,
   MAX_STORY_LENGTH,
@@ -101,30 +102,11 @@ export default function SellerSignupForm({ existingAccount }: SellerSignupFormPr
 
   async function uploadPhoto(index: number, file: File) {
     try {
-      const presignRes = await fetch("/api/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, contentType: file.type }),
-      });
-      const presignData = await presignRes.json().catch(() => ({}));
-      if (!presignRes.ok) {
-        throw new Error(presignData?.error ?? "Failed to get an upload URL.");
-      }
-
-      const putRes = await fetch(presignData.uploadUrl as string, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!putRes.ok) {
-        throw new Error("Upload to storage failed.");
-      }
+      const fileUrl = await uploadViaPresignedPost(file, "seller-sample-photos");
 
       setPhotos((prev) =>
         prev.map((slot, i) =>
-          i === index
-            ? { ...slot, status: "done", uploadedUrl: presignData.fileUrl as string }
-            : slot,
+          i === index ? { ...slot, status: "done", uploadedUrl: fileUrl } : slot,
         ),
       );
     } catch (err) {

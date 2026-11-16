@@ -5,42 +5,40 @@ import { Construct } from "constructs";
 /**
  * NetworkStack
  *
- * Per infrastructure-plan.md's "NAT Gateway trap" section: the only thing that
- * ever needs to live in a private VPC subnet for this app is RDS (it never
- * needs outbound internet access). Everything else (Amplify, Lambdas that only
- * call Cognito/SES/Stripe, etc.) stays outside the VPC entirely, where it gets
- * internet access by default at no extra cost.
+ * RDS lives in private isolated subnets and is not reachable from the
+ * internet. App Runner reaches it through a VPC connector placed in private
+ * subnets that have a single NAT gateway, so the app can still call Stripe,
+ * Cognito, and the rest of the public internet. The NAT is the cost of
+ * keeping the database private (about $33/month plus data). There is no
+ * second NAT.
  *
- * This VPC therefore has:
- *  - NO NAT Gateway (the single biggest avoidable cost at MVP scale, ~$33+/mo)
- *  - NO Elastic IP
- *  - A PRIVATE_ISOLATED subnet (currently unused — kept for any future
- *    resource, e.g. a Lambda, that should never be internet-reachable)
- *  - A PUBLIC subnet, now actually used by DataStack's RDS instance: Amplify
- *    Hosting's Next.js SSR compute has no VPC-attachment option at all, so
- *    RDS had to move here (publiclyAccessible, password-protected only) for
- *    the deployed app to be able to reach it. See DataStack's doc comment
- *    for the full rationale/tradeoff.
- *  - An S3 Gateway VPC Endpoint (free) so anything in the VPC that needs S3
- *    access (e.g., a future Lambda doing image processing against RDS) can
- *    reach it without a NAT Gateway or internet path.
+ * An S3 gateway endpoint (free) lets anything in the VPC reach S3 without
+ * using the NAT for that traffic.
  */
 export class NetworkStack extends cdk.Stack {
   public readonly vpc: ec2.Vpc;
+  /** Attached to the App Runner VPC connector. The database allows this group. */
+  public readonly appRunnerConnectorSecurityGroup: ec2.SecurityGroup;
+  /** Weekly placement Lambda. The database allows this group as well. */
+  public readonly placementLambdaSecurityGroup: ec2.SecurityGroup;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
     this.vpc = new ec2.Vpc(this, "UpSycleVpc", {
       vpcName: "upsycle-vpc",
-      // Two AZs for RDS subnet group validity (RDS requires a subnet group
-      // spanning >= 2 AZs even for a single-AZ instance deployment).
+      // Two AZs so the RDS subnet group is valid even when the instance is single-AZ.
       maxAzs: 2,
-      natGateways: 0,
+      natGateways: 1,
       subnetConfiguration: [
         {
           name: "public",
           subnetType: ec2.SubnetType.PUBLIC,
+          cidrMask: 24,
+        },
+        {
+          name: "app-private",
+          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
           cidrMask: 24,
         },
         {
@@ -51,13 +49,23 @@ export class NetworkStack extends cdk.Stack {
       ],
     });
 
-    // Free Gateway endpoint — lets anything inside the VPC reach S3 without a
-    // NAT Gateway or internet route. Attached to all subnets (cheap, no
-    // per-hour cost, only pay-as-you-go data already priced into S3).
+    this.appRunnerConnectorSecurityGroup = new ec2.SecurityGroup(this, "AppRunnerConnectorSecurityGroup", {
+      vpc: this.vpc,
+      description: "App Runner VPC connector. Allowed to reach RDS.",
+      allowAllOutbound: true,
+    });
+
+    this.placementLambdaSecurityGroup = new ec2.SecurityGroup(this, "PlacementLambdaSecurityGroup", {
+      vpc: this.vpc,
+      description: "Weekly placement Lambda. Allowed to reach RDS.",
+      allowAllOutbound: true,
+    });
+
     this.vpc.addGatewayEndpoint("S3GatewayEndpoint", {
       service: ec2.GatewayVpcEndpointAwsService.S3,
       subnets: [
         { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
+        { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
         { subnetType: ec2.SubnetType.PUBLIC },
       ],
     });

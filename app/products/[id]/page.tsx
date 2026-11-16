@@ -11,6 +11,7 @@ import {
   sellerDisplayName,
   stockLabel,
 } from "@/lib/format";
+import { isApprovedSellerStatus } from "@/lib/public-catalog";
 
 // Always fetched live from the DB — no build-time prerender.
 export const dynamic = "force-dynamic";
@@ -51,7 +52,7 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
     },
   });
 
-  if (!product) {
+  if (!product || !isApprovedSellerStatus(product.sellerProfile.approvalStatus)) {
     notFound();
   }
 

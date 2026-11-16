@@ -17,8 +17,12 @@ import type Stripe from "stripe";
 import type { PlacementPageType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getStripeClient, getStripeWebhookSecret } from "@/lib/stripe";
-import { decodeCartMetadataItems } from "@/lib/cart";
+import { fulfillPaidCart } from "@/lib/checkout-fulfillment";
+import { createPrismaCheckoutStore } from "@/lib/prisma-checkout-store";
+import { fulfillPlacementSlot } from "@/lib/placement-fulfillment";
 import { PAID_SLOT_COUNT, placementSlotPriceCents } from "@/lib/placement";
+import { parseStoredCartLines } from "@/lib/stored-cart";
+import { paymentIntentIdFromSession, refundStripePayment } from "@/lib/stripe-refund";
 
 export async function POST(request: NextRequest) {
   const signature = request.headers.get("stripe-signature");
@@ -38,125 +42,90 @@ export async function POST(request: NextRequest) {
   }
 
   if (event.type !== "checkout.session.completed") {
-    // Not a payment-confirmation event we act on (e.g. session.expired,
-    // payment_intent.* variants) — acknowledge and no-op.
     return NextResponse.json({ received: true });
   }
 
   const session = event.data.object as Stripe.Checkout.Session;
   const metadata = session.metadata ?? {};
-  const stripePaymentId =
-    typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id ?? session.id;
+  const stripePaymentId = paymentIntentIdFromSession(session.payment_intent) ?? session.id;
 
-  // Placement-slot purchases (app/api/sellers/marketing/purchase/route.ts)
-  // use a completely different metadata shape (no `items`/`buyerId`) — branch
-  // out before the cart-order logic below, which assumes `metadata.items`
-  // exists and would misfire ("missing order metadata") on this shape.
   if (metadata.kind === "placement_slot") {
-    return handlePlacementSlotPurchase(metadata, stripePaymentId, session.id);
+    return handlePlacementSlotPurchase(session, metadata, stripePaymentId);
   }
 
-  const buyerId = metadata.buyerId;
-  const shippingAddressId = metadata.shippingAddressId;
-  const lines = decodeCartMetadataItems(metadata.items);
+  return handleCartCheckout(session, metadata, stripePaymentId);
+}
 
-  // An address is only required if at least one line actually ships — an
-  // all-pickup order legitimately has no shippingAddressId. Re-derived from
-  // the decoded lines rather than trusting a separate metadata flag.
-  const needsAddress = lines.some((l) => l.fulfillmentMethod === "SHIP");
-
-  if (!buyerId || lines.length === 0 || (needsAddress && !shippingAddressId)) {
-    console.error("Stripe webhook: checkout.session.completed missing expected metadata", {
-      sessionId: session.id,
-    });
+async function handleCartCheckout(
+  session: Stripe.Checkout.Session,
+  metadata: Record<string, string>,
+  stripePaymentId: string,
+): Promise<NextResponse> {
+  const pendingCheckoutId = metadata.pendingCheckoutId;
+  if (!pendingCheckoutId) {
+    console.error("Stripe webhook: cart checkout missing pendingCheckoutId", { sessionId: session.id });
     return NextResponse.json({ error: "Missing order metadata." }, { status: 400 });
   }
 
-  // Idempotency: Stripe may retry webhook delivery. If we already created an
-  // Order for this payment, don't create a second one.
-  const existing = await prisma.order.findFirst({ where: { stripePaymentId } });
-  if (existing) {
-    return NextResponse.json({ received: true, orderId: existing.id });
+  const pending = await prisma.pendingCheckout.findUnique({ where: { id: pendingCheckoutId } });
+  if (!pending) {
+    console.error("Stripe webhook: pending checkout not found", { pendingCheckoutId, sessionId: session.id });
+    return NextResponse.json({ error: "Missing order metadata." }, { status: 400 });
   }
 
-  const totalAmountCents = lines.reduce(
-    (sum, l) => sum + l.unitPriceCents * l.quantity + l.shippingCostCents,
-    0,
-  );
+  const paymentIntentId = paymentIntentIdFromSession(session.payment_intent);
+  const stripe = getStripeClient();
 
   try {
-    const order = await prisma.$transaction(async (tx) => {
-      const created = await tx.order.create({
-        data: {
-          buyerId,
-          shippingAddressId: shippingAddressId ?? null,
-          totalAmountCents,
-          stripePaymentId,
-          items: {
-            create: lines.map((l) => ({
-              productId: l.productId,
-              sellerProfileId: l.sellerProfileId,
-              quantity: l.quantity,
-              unitPriceCents: l.unitPriceCents,
-              shippingCostCents: l.shippingCostCents,
-              fulfillmentMethod: l.fulfillmentMethod,
-            })),
-          },
-        },
-        include: { items: true },
-      });
-
-      // Decrement inventory per item. The buyer has already been charged at
-      // this point, so we still create the order even if stock ran out from
-      // under us between Checkout Session creation and payment confirmation
-      // (e.g. another buyer bought the last units first) — that's an
-      // oversell edge case flagged for manual seller/support follow-up
-      // rather than a silently dropped order.
-      for (const line of lines) {
-        const product = await tx.product.findUnique({ where: { id: line.productId } });
-        if (!product) continue;
-        const remaining = product.inventoryCount - line.quantity;
-        if (remaining < 0) {
-          console.error("OVERSOLD: inventory went negative — needs manual follow-up", {
-            productId: line.productId,
-            orderId: created.id,
-            requested: line.quantity,
-            available: product.inventoryCount,
-          });
+    const result = await fulfillPaidCart({
+      paymentStatus: session.payment_status,
+      amountTotal: session.amount_total,
+      stripePaymentId,
+      pending: {
+        buyerId: pending.buyerId,
+        shippingAddressId: pending.shippingAddressId,
+        totalAmountCents: pending.totalAmountCents,
+        lines: parseStoredCartLines(pending.linesJson),
+        status: pending.status,
+        stripePaymentId: pending.stripePaymentId,
+        refundDueCents: pending.refundDueCents,
+        refundedAmountCents: pending.refundedAmountCents,
+      },
+      store: createPrismaCheckoutStore(pending.id),
+      refund: async (amountCents) => {
+        if (!paymentIntentId) {
+          throw new Error("Paid session is missing a payment intent, so it cannot be refunded.");
         }
-        await tx.product.update({
-          where: { id: line.productId },
-          data: { inventoryCount: Math.max(0, remaining) },
-        });
-      }
-
-      return created;
+        await refundStripePayment(stripe, paymentIntentId, amountCents);
+      },
+      savePending: async (patch) => {
+        await prisma.pendingCheckout.update({ where: { id: pending.id }, data: patch });
+      },
     });
 
-    return NextResponse.json({ received: true, orderId: order.id });
+    if (result.outcome === "ignored_unpaid") {
+      return NextResponse.json({ received: true, ignored: "unpaid" });
+    }
+    if (result.outcome === "duplicate") {
+      return NextResponse.json({ received: true, orderId: result.orderId });
+    }
+    if (result.outcome === "refunded") {
+      return NextResponse.json({ received: true, refunded: true, reason: result.reason });
+    }
+    return NextResponse.json({ received: true, orderId: result.orderId, refundedCents: result.refundedCents });
   } catch (err) {
-    console.error("Failed to create Order after Stripe payment confirmation:", err, {
+    console.error("Failed to record order after Stripe payment confirmation:", err, {
       sessionId: session.id,
       stripePaymentId,
     });
-    // Return 500 so Stripe retries the webhook — the payment already
-    // succeeded, so we want another attempt at recording the Order rather
-    // than silently losing it.
     return NextResponse.json({ error: "Failed to record order." }, { status: 500 });
   }
 }
 
-/**
- * checkout.session.completed for a placement-slot purchase
- * (app/api/sellers/marketing/purchase/route.ts). Creates the
- * FeaturedSlotPurchase row only now that Stripe has confirmed payment —
- * same "don't trust an uncompleted session" principle as the cart-order
- * path above.
- */
 async function handlePlacementSlotPurchase(
+  session: Stripe.Checkout.Session,
   metadata: Record<string, string>,
   stripePaymentId: string,
-  sessionId: string,
 ): Promise<NextResponse> {
   const periodId = metadata.periodId;
   const pageType = metadata.pageType as PlacementPageType | undefined;
@@ -164,77 +133,87 @@ async function handlePlacementSlotPurchase(
   const sellerProfileId = metadata.sellerProfileId;
 
   if (!periodId || !pageType || !sellerProfileId) {
-    console.error("Stripe webhook: placement_slot checkout.session.completed missing expected metadata", {
-      sessionId,
+    console.error("Stripe webhook: placement_slot checkout missing expected metadata", {
+      sessionId: session.id,
     });
     return NextResponse.json({ error: "Missing placement slot metadata." }, { status: 400 });
   }
 
-  // Idempotency: Stripe may retry webhook delivery. If we already created a
-  // FeaturedSlotPurchase for this payment, don't create a second one.
-  const existing = await prisma.featuredSlotPurchase.findFirst({ where: { stripePaymentId } });
-  if (existing) {
-    return NextResponse.json({ received: true, slotPurchaseId: existing.id });
-  }
+  const paymentIntentId = paymentIntentIdFromSession(session.payment_intent);
+  const stripe = getStripeClient();
 
   try {
-    const slotPurchase = await prisma.$transaction(async (tx) => {
-      // Re-validate slot availability inside the transaction rather than
-      // trusting the slotNumber the purchase route picked earlier: two
-      // sellers can race for the same number between session creation and
-      // webhook confirmation. The buyer has already been charged at this
-      // point, so instead of failing an already-paid purchase if their
-      // originally-picked slot got taken first, we just insert at the next
-      // available slotNumber for this (periodId, pageType, categoryId).
-      const taken = await tx.featuredSlotPurchase.findMany({
-        where: { periodId, pageType, categoryId },
-        select: { slotNumber: true },
-      });
-      const takenSet = new Set(taken.map((s) => s.slotNumber));
-      let slotNumber: number | null = null;
-      for (let n = 1; n <= PAID_SLOT_COUNT; n++) {
-        if (!takenSet.has(n)) {
-          slotNumber = n;
-          break;
+    const result = await fulfillPlacementSlot({
+      paymentStatus: session.payment_status,
+      amountTotal: session.amount_total,
+      expectedPriceCents: placementSlotPriceCents(pageType),
+      findExisting: () => prisma.featuredSlotPurchase.findUnique({ where: { stripePaymentId }, select: { id: true } }),
+      assignSlot: () => assignPlacementSlot({ periodId, pageType, categoryId, sellerProfileId, stripePaymentId }),
+      refund: async (amountCents) => {
+        if (!paymentIntentId) {
+          throw new Error("Paid session is missing a payment intent, so it cannot be refunded.");
         }
-      }
-      if (slotNumber === null) {
-        // All 20 slots filled by the time payment confirmed — extremely
-        // unlikely (would mean 20 successful purchases raced this one) but
-        // flagged for manual follow-up/refund rather than silently dropped.
-        console.error("PLACEMENT SLOT OVERSOLD: no slotNumber available at webhook time — needs refund/manual follow-up", {
-          periodId,
-          pageType,
-          categoryId,
-          sellerProfileId,
-          stripePaymentId,
-        });
-        throw new Error("No placement slot available.");
-      }
-
-      return tx.featuredSlotPurchase.create({
-        data: {
-          periodId,
-          pageType,
-          categoryId,
-          slotNumber,
-          sellerProfileId,
-          priceCents: placementSlotPriceCents(pageType),
-          isRandomFill: false,
-          stripePaymentId,
-        },
-      });
+        await refundStripePayment(stripe, paymentIntentId, amountCents);
+      },
     });
 
-    return NextResponse.json({ received: true, slotPurchaseId: slotPurchase.id });
+    if (result.outcome === "ignored_unpaid") {
+      return NextResponse.json({ received: true, ignored: "unpaid" });
+    }
+    if (result.outcome === "refunded") {
+      return NextResponse.json({ received: true, refunded: true, reason: result.reason });
+    }
+    return NextResponse.json({ received: true, slotPurchaseId: result.slotPurchaseId });
   } catch (err) {
-    console.error("Failed to create FeaturedSlotPurchase after Stripe payment confirmation:", err, {
-      sessionId,
+    console.error("Failed to record placement slot after Stripe payment confirmation:", err, {
+      sessionId: session.id,
       stripePaymentId,
     });
-    // Return 500 so Stripe retries the webhook — the payment already
-    // succeeded, so we want another attempt at recording the slot rather
-    // than silently losing it.
     return NextResponse.json({ error: "Failed to record placement slot purchase." }, { status: 500 });
   }
+}
+
+async function assignPlacementSlot(input: {
+  periodId: string;
+  pageType: PlacementPageType;
+  categoryId: string | null;
+  sellerProfileId: string;
+  stripePaymentId: string;
+}): Promise<{ id: string } | null> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.stripePaymentId})::bigint)`;
+    const already = await tx.featuredSlotPurchase.findUnique({
+      where: { stripePaymentId: input.stripePaymentId },
+      select: { id: true },
+    });
+    if (already) return already;
+
+    const taken = await tx.featuredSlotPurchase.findMany({
+      where: { periodId: input.periodId, pageType: input.pageType, categoryId: input.categoryId },
+      select: { slotNumber: true },
+    });
+    const takenSet = new Set(taken.map((slot) => slot.slotNumber));
+    let slotNumber: number | null = null;
+    for (let n = 1; n <= PAID_SLOT_COUNT; n++) {
+      if (!takenSet.has(n)) {
+        slotNumber = n;
+        break;
+      }
+    }
+    if (slotNumber === null) return null;
+
+    return tx.featuredSlotPurchase.create({
+      data: {
+        periodId: input.periodId,
+        pageType: input.pageType,
+        categoryId: input.categoryId,
+        slotNumber,
+        sellerProfileId: input.sellerProfileId,
+        priceCents: placementSlotPriceCents(input.pageType),
+        isRandomFill: false,
+        stripePaymentId: input.stripePaymentId,
+      },
+      select: { id: true },
+    });
+  });
 }

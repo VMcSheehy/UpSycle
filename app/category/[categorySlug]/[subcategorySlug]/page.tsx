@@ -65,6 +65,7 @@ export default async function SubcategoryPage({ params, searchParams }: Subcateg
 
   const standardWhere = {
     categoryId: category.id,
+    sellerProfile: { approvalStatus: "APPROVED" as const },
     ...(shownProductIds.size > 0 ? { id: { notIn: Array.from(shownProductIds) } } : {}),
   };
 

@@ -1,11 +1,10 @@
 name: Deploy to App Runner
 
-# Runs on every push to main: builds the Docker image, pushes it to ECR, and
-# updates the App Runner service — the same thing `cdk deploy
-# UpSycle-AppRunnerStack` does locally. Uses OIDC to assume an AWS IAM role
-# (see infra/lib/stacks/cicd-stack.ts) rather than storing AWS access keys
-# as GitHub secrets; that role's trust policy only allows assumption from
-# this exact repo's `main` branch.
+# Push to main: lint, typecheck, and build first, then deploy. AWS account
+# and region come from GitHub Actions variables (AWS_ACCOUNT_ID, AWS_REGION),
+# not from a hardcoded account. The OIDC role only exists in that account.
+# See infra/lib/stacks/cicd-stack.ts. Default repo for the role trust policy
+# is VMcSheehy/UpSycle (infra/bin/infra.ts).
 on:
   push:
     branches: [main]
@@ -16,28 +15,62 @@ permissions:
   contents: read
 
 jobs:
+  verify:
+    name: Lint, typecheck, and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/upsycle?schema=public
+          SITE_URL: https://upsyclemarket.com
+
   deploy:
+    name: Migrate and deploy
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::506145782106:role/UpSycle-GitHubActionsDeployRole
-          aws-region: us-west-2
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/UpSycle-GitHubActionsDeployRole
+          aws-region: ${{ vars.AWS_REGION || 'us-west-2' }}
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
       - name: Install app dependencies
-        # The weekly placement Lambda (infra/lib/stacks/placement-stack.ts)
-        # bundles against this app root's own node_modules (@prisma/client +
-        # the generated .prisma engines, per schema.prisma's binaryTargets)
-        # rather than installing its own copy — `cdk deploy`'s asset-staging
-        # step fails without this (ENOENT on node_modules/@prisma/client) since
-        # nothing else on this runner ever installs the app's dependencies.
         run: npm ci
+
+      - name: Apply database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "DATABASE_URL is not set. A private database cannot be reached from this runner."
+            echo "The App Runner container runs prisma migrate deploy on startup."
+            exit 0
+          fi
+          npx prisma migrate deploy
 
       - name: Install infra dependencies
         working-directory: infra
@@ -45,4 +78,4 @@ jobs:
 
       - name: cdk deploy
         working-directory: infra
-        run: npx cdk deploy UpSycle-AppRunnerStack --require-approval never
+        run: npx cdk deploy UpSycle-NetworkStack UpSycle-DataStack UpSycle-AppRunnerStack UpSycle-PlacementStack --require-approval never

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import SellerSignupForm from "@/components/seller/SellerSignupForm";
 import { prisma } from "@/lib/prisma";
@@ -27,6 +28,31 @@ export default async function SellerSignupPage() {
   // already, re-submitting would violate its one-per-user uniqueness.
   if (auth.failure.kind === "not-approved") {
     redirect("/sell/pending");
+  }
+
+  // Sample photos are stored under the signed-in user's id. A visitor who
+  // is not signed in creates a buyer account first, then comes back.
+  if (auth.failure.kind === "unauthenticated") {
+    return (
+      <div className="border border-[var(--border)] bg-[var(--charcoal)] p-10 text-center md:p-14">
+        <div className="eyebrow justify-center before:hidden">Open a Shop</div>
+        <h1 className="sec-title">
+          Sign in to <em>apply</em>
+        </h1>
+        <p className="mx-auto mb-8 max-w-xl text-[0.95rem] font-light leading-loose text-[var(--muted2)]">
+          Create a free account and sign in before you apply. Your sample photos are saved to your
+          account so our team can review them in private.
+        </p>
+        <div className="flex flex-wrap justify-center gap-4">
+          <Link href="/signup" className="btn-primary">
+            Create an account
+          </Link>
+          <Link href="/login?redirectTo=%2Fsell%2Fsignup" className="btn-secondary">
+            Sign in
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   // Logged in (as a buyer, most likely) but no SellerProfile yet: skip

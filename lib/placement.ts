@@ -4,6 +4,7 @@
 // three page templates can't drift from each other on slot counts/pricing.
 import type { PlacementPageType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isApprovedSellerStatus } from "@/lib/public-catalog";
 
 // Prompts/product_layout.md: 10 lottery winners for every page type (Home,
 // each top-level Category, each leaf Sub-Category).
@@ -64,10 +65,11 @@ export async function resolveFeaturedProduct(sellerProfileId: string, featuredPr
       where: { id: featuredProductId },
       include: featuredProductInclude,
     });
-    if (pinned) return pinned;
+    if (pinned && isApprovedSellerStatus(pinned.sellerProfile.approvalStatus)) return pinned;
+    if (pinned) return null;
   }
   return prisma.product.findFirst({
-    where: { sellerProfileId },
+    where: { sellerProfileId, sellerProfile: { approvalStatus: "APPROVED" } },
     orderBy: { marketingPriority: "asc" },
     include: featuredProductInclude,
   });

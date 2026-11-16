@@ -79,7 +79,7 @@ export default function ShippingPolicyPage() {
       <LegalSection id="contact" num="05" title="Contact Us About This Policy">
         <p>If you have any further questions or comments, you may contact us by:</p>
         <p>
-          Email: <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a>
+          Email: <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a>
           <br />
           Phone: (760) 695-2784
         </p>

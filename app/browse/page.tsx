@@ -5,6 +5,7 @@ import { CATEGORY_TREE } from "@/lib/categories";
 import FilterPanel from "@/components/FilterPanel";
 import ProductCard from "@/components/ProductCard";
 import { dollarsToCents } from "@/lib/format";
+import { publiclyListedProductWhere } from "@/lib/public-catalog";
 
 // This page always queries the live DB for products/pagination, so it can't
 // be statically generated at build time (no DATABASE_URL available then).
@@ -48,7 +49,7 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
     }
   }
 
-  const where: Prisma.ProductWhereInput = {};
+  const where: Prisma.ProductWhereInput = { ...publiclyListedProductWhere };
 
   if (categoryIds) {
     where.categoryId = { in: categoryIds };
