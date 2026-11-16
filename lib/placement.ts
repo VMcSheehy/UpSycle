@@ -2,7 +2,7 @@
 // placement system (Prompts/product_layout.md). Single source of truth so the
 // Lambda draw job, the seller purchase flow, the admin override UI, and the
 // three page templates can't drift from each other on slot counts/pricing.
-import type { PlacementPageType } from "@prisma/client";
+import type { PlacementPageType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 // Prompts/product_layout.md: 10 lottery winners for every page type (Home,
@@ -57,17 +57,38 @@ const featuredProductInclude = {
  * Category > random-fill-paid ranking) wins when present; otherwise falls
  * back to the seller's #1 `marketingPriority` product, which is the normal
  * case for every single-placement winner and every self-purchased paid slot.
+ *
+ * Pass `scope.categoryIds` on a category or subcategory page so the piece
+ * actually belongs to that category (and is still an active listing from an
+ * approved seller). Without a scope, behavior is unchanged for the homepage.
  */
-export async function resolveFeaturedProduct(sellerProfileId: string, featuredProductId: string | null) {
+export async function resolveFeaturedProduct(
+  sellerProfileId: string,
+  featuredProductId: string | null,
+  scope?: { categoryIds: string[] },
+) {
+  const scoped: Prisma.ProductWhereInput = scope
+    ? {
+        categoryId: { in: scope.categoryIds },
+        inventoryCount: { gt: 0 },
+        sellerProfile: { approvalStatus: "APPROVED" },
+      }
+    : {};
+
   if (featuredProductId) {
-    const pinned = await prisma.product.findUnique({
-      where: { id: featuredProductId },
-      include: featuredProductInclude,
-    });
+    const pinned = scope
+      ? await prisma.product.findFirst({
+          where: { id: featuredProductId, sellerProfileId, ...scoped },
+          include: featuredProductInclude,
+        })
+      : await prisma.product.findUnique({
+          where: { id: featuredProductId },
+          include: featuredProductInclude,
+        });
     if (pinned) return pinned;
   }
   return prisma.product.findFirst({
-    where: { sellerProfileId },
+    where: { sellerProfileId, ...scoped },
     orderBy: { marketingPriority: "asc" },
     include: featuredProductInclude,
   });

@@ -1,77 +1,105 @@
 import Link from "next/link";
 import type { CategoryNode } from "@/lib/categories";
+import { browseHref, type BrowseQuery } from "@/lib/browse";
 
 interface FilterPanelProps {
   categories: CategoryNode[];
-  activeSlug?: string;
-  q?: string;
-  minPrice?: string;
-  maxPrice?: string;
+  /** Current page path, without a query string. The form submits here. */
+  path: string;
+  activeCategorySlug?: string;
+  activeSubcategorySlug?: string;
+  query: BrowseQuery;
 }
 
 const labelClass =
   "mb-2 block text-[0.65rem] font-medium tracking-[0.13em] uppercase text-[var(--muted)]";
-const priceInputClass =
-  "w-full border border-[var(--border)] bg-[var(--panel2)] px-3 py-2 text-sm text-[var(--cream)] outline-none transition-colors placeholder:text-[rgba(245,237,224,0.3)] focus:border-[var(--rg-core)]";
-const radioLabelClass =
-  "flex cursor-pointer items-center gap-2 text-[0.8rem] text-[var(--cream)] transition-colors hover:text-[var(--rg-light)]";
-const radioLabelSmallClass =
-  "flex cursor-pointer items-center gap-2 text-[0.72rem] text-[var(--muted2)] transition-colors hover:text-[var(--rg-light)]";
+const fieldClass =
+  "w-full border border-[#C78A6E] bg-[#000000] px-3 py-2 text-sm text-[#FFEBE4] outline-none transition-colors placeholder:text-[#D9A188] focus:border-[#ECB7A9]";
 
 /**
- * Unified browse-page filter panel: category, price range, and (via the
- * carried-forward `q` hidden field) search. Plain GET form — no client JS,
- * matching CategoryNav's server-component-only pattern.
+ * Category links go to /browse/[category] (and the subcategory under it).
+ * Search, price, and sort stay on the page you're already on, so a filter
+ * never dumps you back into the whole catalog.
  */
 export default function FilterPanel({
   categories,
-  activeSlug,
-  q,
-  minPrice,
-  maxPrice,
+  path,
+  activeCategorySlug,
+  activeSubcategorySlug,
+  query,
 }: FilterPanelProps) {
+  const preserved: Partial<BrowseQuery> = {
+    q: query.q,
+    minPrice: query.minPrice,
+    maxPrice: query.maxPrice,
+    sort: query.sort,
+  };
+
   return (
     <div className="flex flex-col gap-8">
-      <form action="/browse" method="GET" className="flex flex-col gap-8">
-        {q && <input type="hidden" name="q" value={q} />}
+      <nav aria-label="Product categories" className="flex flex-col gap-4">
+        <span className={labelClass}>Category</span>
+        <Link
+          href={browseHref("/browse", preserved)}
+          className={`text-[0.8rem] no-underline transition-colors ${
+            !activeCategorySlug ? "text-[#FFFFFF]" : "text-[#FFEBE4] hover:text-[#ECB7A9]"
+          }`}
+          aria-current={!activeCategorySlug ? "page" : undefined}
+        >
+          All categories
+        </Link>
+        {categories.map((cat) => {
+          const parentActive = activeCategorySlug === cat.slug;
+          return (
+            <div key={cat.slug}>
+              <Link
+                href={browseHref(`/browse/${cat.slug}`, preserved)}
+                className={`block font-serif text-[1.05rem] no-underline transition-colors ${
+                  parentActive ? "text-[#ECB7A9]" : "text-[#FFFFFF] hover:text-[#ECB7A9]"
+                }`}
+                aria-current={parentActive && !activeSubcategorySlug ? "page" : undefined}
+              >
+                {cat.name}
+              </Link>
+              {cat.children && cat.children.length > 0 && (
+                <ul className="mt-2 flex flex-col gap-1.5 border-l border-[#C78A6E] pl-4 list-none">
+                  {cat.children.map((child) => {
+                    const childActive = activeSubcategorySlug === child.slug;
+                    return (
+                      <li key={child.slug}>
+                        <Link
+                          href={browseHref(`/browse/${cat.slug}/${child.slug}`, preserved)}
+                          className={`text-[0.8rem] no-underline transition-colors ${
+                            childActive ? "text-[#FFFFFF]" : "text-[#D9A188] hover:text-[#FFFFFF]"
+                          }`}
+                          aria-current={childActive ? "page" : undefined}
+                        >
+                          {child.name}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+      </nav>
 
-        <fieldset>
-          <legend className={labelClass}>Category</legend>
-          <nav aria-label="Product categories" className="flex flex-col gap-3">
-            <label className={radioLabelClass}>
-              <input type="radio" name="cat" value="" defaultChecked={!activeSlug} />
-              All Categories
-            </label>
-            {categories.map((cat) => (
-              <div key={cat.slug}>
-                <label className={radioLabelClass}>
-                  <input
-                    type="radio"
-                    name="cat"
-                    value={cat.slug}
-                    defaultChecked={activeSlug === cat.slug}
-                  />
-                  {cat.name}
-                </label>
-                {cat.children && cat.children.length > 0 && (
-                  <div className="mt-2 flex flex-col gap-2 border-l border-[var(--border)] pl-4">
-                    {cat.children.map((child) => (
-                      <label key={child.slug} className={radioLabelSmallClass}>
-                        <input
-                          type="radio"
-                          name="cat"
-                          value={child.slug}
-                          defaultChecked={activeSlug === child.slug}
-                        />
-                        {child.name}
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </nav>
-        </fieldset>
+      <form action={path} method="GET" className="flex flex-col gap-6">
+        <div>
+          <label className={labelClass} htmlFor="browse-q">
+            {activeCategorySlug ? "Search this category" : "Search"}
+          </label>
+          <input
+            id="browse-q"
+            type="search"
+            name="q"
+            defaultValue={query.q}
+            placeholder="Title or description"
+            className={fieldClass}
+          />
+        </div>
 
         <fieldset>
           <legend className={labelClass}>Price</legend>
@@ -87,11 +115,11 @@ export default function FilterPanel({
                 min={0}
                 step="0.01"
                 placeholder="Min $"
-                defaultValue={minPrice}
-                className={priceInputClass}
+                defaultValue={query.minPrice}
+                className={fieldClass}
               />
             </div>
-            <span className="text-[var(--muted)]">–</span>
+            <span className="text-[#D9A188]">–</span>
             <div className="flex-1">
               <label className="sr-only" htmlFor="maxPrice">
                 Maximum price
@@ -103,23 +131,39 @@ export default function FilterPanel({
                 min={0}
                 step="0.01"
                 placeholder="Max $"
-                defaultValue={maxPrice}
-                className={priceInputClass}
+                defaultValue={query.maxPrice}
+                className={fieldClass}
               />
             </div>
           </div>
         </fieldset>
 
+        <div>
+          <label className={labelClass} htmlFor="browse-sort">
+            Sort
+          </label>
+          <select
+            id="browse-sort"
+            name="sort"
+            defaultValue={query.sort}
+            className={fieldClass}
+          >
+            <option value="newest">Newest</option>
+            <option value="price-asc">Price: low to high</option>
+            <option value="price-desc">Price: high to low</option>
+          </select>
+        </div>
+
         <button type="submit" className="btn-secondary">
-          Apply Filters
+          Apply
         </button>
       </form>
 
       <Link
-        href="/browse"
-        className="text-[0.7rem] font-medium uppercase tracking-[0.12em] text-[var(--muted)] no-underline transition-colors hover:text-[var(--rg-light)]"
+        href={path}
+        className="text-[0.7rem] font-medium uppercase tracking-[0.12em] text-[#D9A188] no-underline transition-colors hover:text-[#FFFFFF]"
       >
-        Clear Filters
+        Clear filters
       </Link>
     </div>
   );

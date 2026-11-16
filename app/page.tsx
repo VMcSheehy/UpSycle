@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { getCategoryTree } from "@/lib/categories";
 import { getActivePlacementPeriod, resolveFeaturedProduct } from "@/lib/placement";
 import ProductCard from "@/components/ProductCard";
 import FeaturedBadge from "@/components/FeaturedBadge";
@@ -16,23 +17,11 @@ const trustItems = [
   "Renewed for the Earth",
 ];
 
-const categories = [
-  {
-    slug: "jewelry",
-    title: "Jewelry",
-    desc: "Necklaces, earrings, bracelets & more — reclaimed metals and stones shaped by hand.",
-  },
-  {
-    slug: "home-goods",
-    title: "Home Goods",
-    desc: "Wood working, glass blowing, and pottery — handmade pieces for everyday life.",
-  },
-  {
-    slug: "furniture",
-    title: "Furniture",
-    desc: "Dressers, tables, chairs & more — given a second life by hand.",
-  },
-];
+const categoryBlurbs: Record<string, string> = {
+  jewelry: "Necklaces, earrings, bracelets & more — reclaimed metals and stones shaped by hand.",
+  "home-goods": "Wood working, glass blowing, and pottery — handmade pieces for everyday life.",
+  furniture: "Dressers, tables, chairs & more — given a second life by hand.",
+};
 
 const howItWorksCards = [
   {
@@ -112,7 +101,10 @@ const storyVignettes = [
 type ResolvedProduct = NonNullable<Awaited<ReturnType<typeof resolveFeaturedProduct>>>;
 
 export default async function Home() {
-  const activePeriod = await getActivePlacementPeriod();
+  const [activePeriod, categoryTree] = await Promise.all([
+    getActivePlacementPeriod(),
+    getCategoryTree(),
+  ]);
 
   let featuredProducts: ResolvedProduct[] = [];
   let highlightedProducts: ResolvedProduct[] = [];
@@ -309,20 +301,36 @@ export default async function Home() {
           <h2 className="sec-title">
             Find work across every <em>craft &amp; category</em>
           </h2>
-          <div className="mt-12 grid grid-cols-1 gap-px bg-[var(--border)] sm:grid-cols-2 lg:grid-cols-4">
-            {categories.map((cat) => (
-              <Link
+          <div className="mt-12 flex snap-x snap-mandatory gap-px overflow-x-auto bg-[var(--border)] lg:grid lg:grid-cols-3 lg:overflow-visible">
+            {categoryTree.map((cat) => (
+              <article
                 key={cat.slug}
-                href={`/category/${cat.slug}`}
-                className="block bg-[var(--charcoal)] p-8 no-underline transition-colors hover:bg-[var(--panel)]"
+                className="flex w-[min(85vw,320px)] shrink-0 snap-start flex-col bg-[var(--charcoal)] p-8 lg:w-auto"
               >
-                <h3 className="mb-3 font-serif text-2xl font-normal leading-tight text-[var(--cream)]">
-                  {cat.title}
-                </h3>
+                <Link href={`/browse/${cat.slug}`} className="no-underline">
+                  <h3 className="mb-3 font-serif text-2xl font-normal leading-tight text-[var(--cream)] transition-colors hover:text-[var(--rg-light)]">
+                    {cat.name}
+                  </h3>
+                </Link>
                 <p className="text-[0.88rem] font-light leading-relaxed text-[var(--muted2)]">
-                  {cat.desc}
+                  {categoryBlurbs[cat.slug] ??
+                    cat.children?.map((child) => child.name).join(", ")}
                 </p>
-              </Link>
+                {cat.children && cat.children.length > 0 && (
+                  <ul className="mt-5 flex flex-wrap gap-2 list-none">
+                    {cat.children.map((child) => (
+                      <li key={child.slug}>
+                        <Link
+                          href={`/browse/${cat.slug}/${child.slug}`}
+                          className="inline-block border border-[#C78A6E] px-3 py-1 text-[0.62rem] uppercase tracking-[0.1em] text-[#ECB7A9] no-underline transition-colors hover:bg-[#C78A6E] hover:text-[#000000]"
+                        >
+                          {child.name}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </article>
             ))}
           </div>
           <div className="mt-11 text-center">
