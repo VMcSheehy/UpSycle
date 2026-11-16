@@ -40,7 +40,7 @@ export default function CategoryNav({
           return (
             <div key={cat.slug}>
               <Link
-                href={`/category/${cat.slug}`}
+                href={`/browse/${cat.slug}`}
                 className={`block font-serif text-[1.05rem] no-underline transition-colors ${
                   isActiveParent ? "text-[var(--rg-light)]" : "text-[var(--cream)] hover:text-[var(--rg-light)]"
                 }`}
@@ -52,7 +52,7 @@ export default function CategoryNav({
                   {cat.children.map((child) => (
                     <li key={child.slug}>
                       <Link
-                        href={`/category/${cat.slug}/${child.slug}`}
+                        href={`/browse/${cat.slug}/${child.slug}`}
                         className={`text-[0.8rem] no-underline transition-colors ${
                           activeSlug === child.slug
                             ? "text-[var(--rg-light)]"
@@ -85,15 +85,21 @@ export default function CategoryNav({
         </svg>
       </Link>
       <div
-        className="invisible absolute left-1/2 top-full z-[210] w-[560px] -translate-x-1/2 translate-y-2 opacity-0 transition-all duration-150 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100"
+        className="invisible absolute left-1/2 top-full z-[210] w-max -translate-x-1/2 translate-y-2 opacity-0 transition-all duration-150 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100"
         style={{ paddingTop: "14px" }}
       >
-        <div className="grid grid-cols-4 gap-px border border-[var(--border)] bg-[var(--border)]">
+        <div
+          className="grid gap-px border border-[#C78A6E] bg-[#C78A6E]"
+          style={{
+            width: `${Math.min(Math.max(categories.length, 1), 4) * 180}px`,
+            gridTemplateColumns: `repeat(${Math.min(Math.max(categories.length, 1), 4)}, minmax(0, 1fr))`,
+          }}
+        >
           {categories.map((cat) => (
-            <div key={cat.slug} className="bg-[var(--charcoal)] p-5">
+            <div key={cat.slug} className="bg-[#000000] p-5">
               <Link
-                href={`/category/${cat.slug}`}
-                className="mb-3 block font-serif text-[0.98rem] text-[var(--cream)] no-underline transition-colors hover:text-[var(--rg-light)]"
+                href={`/browse/${cat.slug}`}
+                className="mb-3 block font-serif text-[0.98rem] text-[#FFFFFF] no-underline transition-colors hover:text-[#ECB7A9]"
               >
                 {cat.name}
               </Link>
@@ -101,8 +107,8 @@ export default function CategoryNav({
                 {cat.children?.map((child) => (
                   <li key={child.slug}>
                     <Link
-                      href={`/category/${cat.slug}/${child.slug}`}
-                      className="text-[0.72rem] text-[var(--muted2)] no-underline transition-colors hover:text-[var(--rg-light)]"
+                      href={`/browse/${cat.slug}/${child.slug}`}
+                      className="text-[0.72rem] text-[#D9A188] no-underline transition-colors hover:text-[#FFFFFF]"
                     >
                       {child.name}
                     </Link>

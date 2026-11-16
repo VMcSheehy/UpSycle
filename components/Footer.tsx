@@ -1,14 +1,10 @@
 import Link from "next/link";
+import { getCategoryTree } from "@/lib/categories";
 
 const footerCols = [
   {
     title: "Shop",
-    links: [
-      { href: "/browse", label: "Browse All" },
-      { href: "/browse?cat=jewelry", label: "Jewelry" },
-      { href: "/browse?cat=home-goods", label: "Home Goods" },
-      { href: "/browse?cat=furniture", label: "Furniture" },
-    ],
+    links: [{ href: "/browse", label: "Browse All" }],
   },
   {
     title: "Sell",
@@ -35,7 +31,20 @@ const footerCols = [
   },
 ];
 
-export default function Footer() {
+export default async function Footer() {
+  const categories = await getCategoryTree();
+  const columns = footerCols.map((col) =>
+    col.title === "Shop"
+      ? {
+          ...col,
+          links: [
+            ...col.links,
+            ...categories.map((cat) => ({ href: `/browse/${cat.slug}`, label: cat.name })),
+          ],
+        }
+      : col,
+  );
+
   return (
     <footer className="bg-[var(--black)] border-t border-[var(--border)] px-6 pt-12 pb-8 md:px-14">
       <div className="flex flex-wrap items-start justify-between gap-8 mb-9">
@@ -56,7 +65,7 @@ export default function Footer() {
           </div>
         </div>
         <div className="flex flex-wrap gap-12">
-          {footerCols.map((col) => (
+          {columns.map((col) => (
             <div key={col.title}>
               <h4 className="text-[0.58rem] font-semibold tracking-[0.2em] uppercase text-[var(--rg-core)] mb-3.5">
                 {col.title}

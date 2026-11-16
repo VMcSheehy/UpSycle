@@ -25,7 +25,9 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
   const product = await prisma.product.findUnique({
     where: { id },
     include: {
-      category: true,
+      category: {
+        include: { parent: { select: { name: true, slug: true } } },
+      },
       photos: { orderBy: { position: "asc" } },
       sellerProfile: {
         include: {
@@ -64,18 +66,36 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
   return (
     <section className="px-6 py-28 md:px-14">
       <div className="sec-max">
-        <div className="mb-8 text-[0.68rem] uppercase tracking-[0.12em] text-[var(--muted)]">
-          <Link href="/browse" className="no-underline transition-colors hover:text-[var(--rg-light)]">
+        <nav
+          aria-label="Breadcrumb"
+          className="mb-8 flex flex-wrap items-center gap-2 text-[0.68rem] uppercase tracking-[0.12em]"
+        >
+          <Link href="/browse" className="text-[#D9A188] no-underline transition-colors hover:text-[#FFFFFF]">
             Browse
           </Link>
-          <span className="mx-2 opacity-50">/</span>
+          {product.category.parent && (
+            <>
+              <span className="text-[#D9A188]">/</span>
+              <Link
+                href={`/browse/${product.category.parent.slug}`}
+                className="text-[#D9A188] no-underline transition-colors hover:text-[#FFFFFF]"
+              >
+                {product.category.parent.name}
+              </Link>
+            </>
+          )}
+          <span className="text-[#D9A188]">/</span>
           <Link
-            href={`/browse?cat=${product.category.slug}`}
-            className="no-underline transition-colors hover:text-[var(--rg-light)]"
+            href={
+              product.category.parent
+                ? `/browse/${product.category.parent.slug}/${product.category.slug}`
+                : `/browse/${product.category.slug}`
+            }
+            className="text-[#FFFFFF] no-underline transition-colors hover:text-[#ECB7A9]"
           >
             {product.category.name}
           </Link>
-        </div>
+        </nav>
 
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-2">
           {/* ═══ PHOTOS ═══ */}

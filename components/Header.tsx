@@ -1,10 +1,11 @@
 import Link from "next/link";
 import CategoryNav from "@/components/CategoryNav";
+import MobileBrowseMenu from "@/components/MobileBrowseMenu";
 import CartBadge from "@/components/cart/CartBadge";
 import LogoutButton from "@/components/LogoutButton";
 import { getCurrentUser } from "@/lib/current-user";
 import { resolveSellerAuth } from "@/lib/seller-auth";
-import { CATEGORY_TREE } from "@/lib/categories";
+import { getCategoryTree } from "@/lib/categories";
 
 const navLinks = [
   { href: "/#how-it-works", label: "How It Works" },
@@ -15,7 +16,7 @@ const authNavLinkClass =
   "text-[0.68rem] font-medium tracking-[0.13em] uppercase text-[rgba(245,237,224,0.4)] no-underline transition-colors hover:text-[var(--rg-light)]";
 
 export default async function Header() {
-  const user = await getCurrentUser();
+  const [user, categories] = await Promise.all([getCurrentUser(), getCategoryTree()]);
   const isApprovedSeller = user ? (await resolveSellerAuth()).ok : false;
 
   return (
@@ -26,9 +27,12 @@ export default async function Header() {
         {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset in /public, no next/image config yet */}
         <img src="/wordmark.png" alt="UpSycle Market" className="h-7 w-auto" />
       </Link>
-      <ul className="flex items-center gap-7 list-none">
+      <ul className="flex items-center gap-3 list-none md:gap-7">
+        <li className="md:hidden">
+          <MobileBrowseMenu categories={categories} />
+        </li>
         <li className="hidden md:block">
-          <CategoryNav categories={CATEGORY_TREE} />
+          <CategoryNav categories={categories} />
         </li>
         <li className="hidden lg:block">
           <form action="/browse" method="GET" className="flex items-center">
@@ -53,7 +57,7 @@ export default async function Header() {
         <li>
           <Link
             href={isApprovedSeller ? "/sell/products" : "/sell"}
-            className="border border-[var(--rg-core)] text-[var(--rg-light)] px-5 py-2 text-[0.68rem] font-medium tracking-[0.13em] uppercase no-underline transition-all hover:bg-[var(--rg-core)] hover:text-[var(--black)]"
+            className="whitespace-nowrap border border-[var(--rg-core)] px-3 py-2 text-[0.62rem] font-medium tracking-[0.13em] text-[var(--rg-light)] uppercase no-underline transition-all hover:bg-[var(--rg-core)] hover:text-[var(--black)] md:px-5 md:text-[0.68rem]"
           >
             {isApprovedSeller ? "Seller Dashboard" : "Start Selling"}
           </Link>
