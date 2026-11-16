@@ -11,6 +11,9 @@ const navLinks = [
   { href: "/#story", label: "Our Story" },
 ];
 
+const textNavLinkClass =
+  "text-[0.68rem] font-medium tracking-[0.13em] uppercase text-[var(--muted)] no-underline transition-colors hover:text-[var(--rg-light)]";
+
 const authNavLinkClass =
   "text-[0.68rem] font-medium tracking-[0.13em] uppercase text-[rgba(245,237,224,0.4)] no-underline transition-colors hover:text-[var(--rg-light)]";
 
@@ -19,14 +22,15 @@ export default async function Header() {
   const isApprovedSeller = user ? (await resolveSellerAuth()).ok : false;
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-[200] flex items-center justify-between px-6 py-4 md:px-14 lg:px-20 xl:px-28 bg-[rgba(3,3,3,0.94)] backdrop-blur-[14px] border-b border-[var(--border)]">
+    <nav className="fixed top-0 left-0 right-0 z-[200] border-b border-[var(--border)] bg-[rgba(3,3,3,0.94)] backdrop-blur-[14px]">
+      <div className="flex items-center justify-between px-6 py-4 md:px-14 lg:px-20 xl:px-16">
       <Link href="/" className="flex items-center gap-3 no-underline">
         {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset in /public, no next/image config yet */}
         <img src="/iconmark.png" alt="" aria-hidden="true" className="h-8 w-auto shrink-0" />
         {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset in /public, no next/image config yet */}
         <img src="/wordmark.png" alt="UpSycle Market" className="h-7 w-auto" />
       </Link>
-      <ul className="flex items-center gap-7 list-none">
+      <ul className="flex items-center gap-4 list-none xl:gap-5">
         <li className="hidden md:block">
           <CategoryNav categories={CATEGORY_TREE} />
         </li>
@@ -42,14 +46,16 @@ export default async function Header() {
         </li>
         {navLinks.map((link) => (
           <li key={link.href} className="hidden md:block">
-            <Link
-              href={link.href}
-              className="text-[0.68rem] font-medium tracking-[0.13em] uppercase text-[var(--muted)] no-underline transition-colors hover:text-[var(--rg-light)]"
-            >
+            <Link href={link.href} className={textNavLinkClass}>
               {link.label}
             </Link>
           </li>
         ))}
+        <li className="hidden xl:block">
+          <Link href="/sell" className={textNavLinkClass}>
+            Sell on UpSycle
+          </Link>
+        </li>
         <li>
           <Link
             href={isApprovedSeller ? "/sell/products" : "/sell"}
@@ -82,6 +88,12 @@ export default async function Header() {
           <CartBadge />
         </li>
       </ul>
+      </div>
+      <div className="border-t border-[var(--border)] px-6 py-2 text-center xl:hidden">
+        <Link href="/sell" className={textNavLinkClass}>
+          Sell on UpSycle
+        </Link>
+      </div>
     </nav>
   );
 }

@@ -10,15 +10,12 @@ import {
   type SellerSignupInput,
   validateSellerSignup,
 } from "@/lib/validation/sellerSignup";
-
-const SELLER_TIER_PLACEHOLDER =
-  "Benefits and pricing for this tier are still being finalized — you'll be notified before anything changes.";
-
-const SELLER_TIERS: { value: SellerTier; label: string }[] = [
-  { value: "TIER_1", label: "Tier 1" },
-  { value: "TIER_2", label: "Tier 2" },
-  { value: "TIER_3", label: "Tier 3" },
-];
+import {
+  SELLER_PLANS,
+  TRIAL_DAYS,
+  formatTierPrice,
+  type SellerTierId,
+} from "@/lib/tiers";
 
 interface PhotoSlot {
   file: File | null;
@@ -52,9 +49,11 @@ interface SellerSignupFormProps {
   // address from the account's existing default, if any. See
   // app/(seller)/sell/signup/page.tsx.
   existingAccount?: { email: string; defaultAddress?: AddressInput };
+  // Set when the maker arrives from a plan card on /sell.
+  initialTier?: SellerTierId;
 }
 
-export default function SellerSignupForm({ existingAccount }: SellerSignupFormProps) {
+export default function SellerSignupForm({ existingAccount, initialTier }: SellerSignupFormProps) {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
@@ -73,7 +72,7 @@ export default function SellerSignupForm({ existingAccount }: SellerSignupFormPr
   const [socialMediaUrls, setSocialMediaUrls] = useState<string[]>([""]);
   const [expectedMonthlySales, setExpectedMonthlySales] = useState("");
   const [supplierList, setSupplierList] = useState<string[]>([""]);
-  const [tier, setTier] = useState<SellerTier>("TIER_1");
+  const [tier, setTier] = useState<SellerTier>(initialTier ?? "TIER_1");
   const [referralEmail, setReferralEmail] = useState("");
 
   const [photos, setPhotos] = useState<PhotoSlot[]>(
@@ -523,34 +522,48 @@ export default function SellerSignupForm({ existingAccount }: SellerSignupFormPr
 
       {/* SELLER TIER */}
       <div className={sectionClass}>
-        <h2 className={sectionHeadingClass}>Seller Tier</h2>
+        <h2 className={sectionHeadingClass}>Choose your plan</h2>
         <p className="mb-4 text-[0.78rem] font-light text-[var(--muted2)]">
-          Choose the tier you&apos;d like to apply under. Pricing and benefits for each tier are
-          still being finalized.
+          Every plan includes a {TRIAL_DAYS}-day free trial once billing is turned on. You can
+          change this later from your dashboard. Applying does not charge you.
         </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {SELLER_TIERS.map((option) => (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+          {SELLER_PLANS.map((plan) => (
             <label
-              key={option.value}
+              key={plan.id}
               className={`flex cursor-pointer flex-col gap-2 border p-4 transition-colors ${
-                tier === option.value
+                tier === plan.id
                   ? "border-[var(--rg-core)] bg-[var(--panel2)]"
                   : "border-[var(--border)] bg-[var(--panel2)] hover:border-[var(--rg-core)]"
               }`}
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span className="inline-block bg-[var(--rg-grad)] px-2 py-1 text-[0.55rem] font-bold tracking-[0.14em] text-[var(--black)] uppercase">
+                    {plan.name}
+                  </span>
+                  {plan.popular && (
+                    <span className="mt-2 block text-[0.55rem] font-semibold tracking-[0.14em] text-[var(--rg-core)] uppercase">
+                      Most popular
+                    </span>
+                  )}
+                  <div className="mt-2 font-serif text-xl text-[var(--cream)]">{plan.tierLabel}</div>
+                </div>
                 <input
                   type="radio"
                   name="tier"
-                  value={option.value}
-                  checked={tier === option.value}
-                  onChange={() => setTier(option.value)}
-                  className="accent-[var(--rg-core)]"
+                  value={plan.id}
+                  checked={tier === plan.id}
+                  onChange={() => setTier(plan.id)}
+                  className="mt-1 accent-[var(--rg-core)]"
+                  aria-label={`${plan.tierLabel} ${plan.name}`}
                 />
-                <span className="text-sm font-medium text-[var(--cream)]">{option.label}</span>
               </div>
-              <p className="text-[0.78rem] font-light text-[var(--muted2)]">
-                {SELLER_TIER_PLACEHOLDER}
+              <div className="text-[1.05rem] text-[var(--rg-light)]">
+                {formatTierPrice(plan.monthlyPriceCents)}/mo
+              </div>
+              <p className="text-[0.75rem] font-light leading-relaxed text-[var(--muted2)]">
+                {plan.pickerSummary}
               </p>
             </label>
           ))}

@@ -16,6 +16,7 @@ import {
   TierChangeReason,
 } from "@prisma/client";
 import { CATEGORY_TREE } from "../lib/categories";
+import { planById } from "../lib/tiers";
 
 const prisma = new PrismaClient();
 
@@ -23,14 +24,17 @@ const prisma = new PrismaClient();
 // hand-written data backfill (that migration seeds these same values via raw
 // SQL for the existing prod DB) — kept in sync so a fresh `migrate reset &&
 // db seed` on a new dev DB reaches the same state without going through that
-// migration's INSERT statements. Tier 2/3 are placeholder-zero benefits with
-// isPricingFinalized: false because Prompts/Tier_system.md never defines
-// them — see the TierPlan model comment in schema.prisma.
+// migration's INSERT statements. Monthly prices are owned by lib/tiers.ts so
+// the public plans page cannot drift from this seed. Tier 2/3 are
+// placeholder-zero benefits with isPricingFinalized: false because
+// Prompts/Tier_system.md never defines them — see the TierPlan model comment
+// in schema.prisma. Marketing features on /sell are not written here and are
+// not enforced.
 const TIER_PLANS = [
   {
     tier: SellerTier.TIER_1,
     name: "Tier 1",
-    monthlyPriceCents: 3999,
+    monthlyPriceCents: planById("TIER_1").monthlyPriceCents,
     quarterlySalesTargetCents: 200_000,
     lotteryEntriesPerPeriod: 1,
     socialPostsPerPeriod: 1,
@@ -41,7 +45,7 @@ const TIER_PLANS = [
   {
     tier: SellerTier.TIER_2,
     name: "Tier 2",
-    monthlyPriceCents: 2999,
+    monthlyPriceCents: planById("TIER_2").monthlyPriceCents,
     quarterlySalesTargetCents: 50_000,
     lotteryEntriesPerPeriod: 0,
     socialPostsPerPeriod: 0,
@@ -52,7 +56,7 @@ const TIER_PLANS = [
   {
     tier: SellerTier.TIER_3,
     name: "Tier 3",
-    monthlyPriceCents: 1999,
+    monthlyPriceCents: planById("TIER_3").monthlyPriceCents,
     quarterlySalesTargetCents: 0,
     lotteryEntriesPerPeriod: 0,
     socialPostsPerPeriod: 0,

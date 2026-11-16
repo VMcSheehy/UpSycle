@@ -13,7 +13,8 @@ const footerCols = [
   {
     title: "Sell",
     links: [
-      { href: "/sell", label: "Open a Shop" },
+      { href: "/sell", label: "Sell on UpSycle" },
+      { href: "/sell/signup", label: "Open a Shop" },
       { href: "/login", label: "Seller Sign In" },
       { href: "/#how-it-works", label: "How It Works" },
     ],
