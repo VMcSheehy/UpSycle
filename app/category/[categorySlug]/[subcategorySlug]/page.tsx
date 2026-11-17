@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getActivePlacementPeriod, resolveFeaturedProduct } from "@/lib/placement";
 import ProductCard from "@/components/ProductCard";
 import FeaturedBadge from "@/components/FeaturedBadge";
+import { publicSellerWhere } from "@/lib/public-catalog";
 
 // Featured/Highlighted/Standard sections are all fetched live from the DB,
 // so this page can't be statically generated at build time (no DATABASE_URL
@@ -65,7 +66,7 @@ export default async function SubcategoryPage({ params, searchParams }: Subcateg
 
   const standardWhere = {
     categoryId: category.id,
-    sellerProfile: { approvalStatus: "APPROVED" as const },
+    sellerProfile: publicSellerWhere(),
     ...(shownProductIds.size > 0 ? { id: { notIn: Array.from(shownProductIds) } } : {}),
   };
 

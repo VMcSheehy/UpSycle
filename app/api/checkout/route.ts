@@ -32,7 +32,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/current-user";
 import { getStripeClient } from "@/lib/stripe";
 import { getSiteUrl } from "@/lib/site-url";
-import { isApprovedSellerStatus } from "@/lib/public-catalog";
+import { listingSubscriptionSelect, sellerListingsArePublic } from "@/lib/public-catalog";
 import { orderTotalCents, type StoredCartLine } from "@/lib/stored-cart";
 import { MAX_CART_LINES, MAX_QUANTITY_PER_LINE, type CheckoutCartItem } from "@/lib/cart";
 
@@ -88,7 +88,11 @@ export async function POST(request: NextRequest) {
   const productIds = [...merged.keys()];
   const products = await prisma.product.findMany({
     where: { id: { in: productIds } },
-    include: { sellerProfile: { select: { approvalStatus: true } } },
+    include: {
+      sellerProfile: {
+        select: { approvalStatus: true, subscription: { select: listingSubscriptionSelect } },
+      },
+    },
   });
   const byId = new Map(products.map((p) => [p.id, p]));
 
@@ -97,7 +101,7 @@ export async function POST(request: NextRequest) {
     const product = byId.get(item.productId);
     const quantity = Math.floor(item.quantity);
 
-    if (!product || !isApprovedSellerStatus(product.sellerProfile.approvalStatus)) {
+    if (!product || !sellerListingsArePublic(product.sellerProfile)) {
       return NextResponse.json(
         { error: "One of the items in your cart is no longer available. Please review your cart." },
         { status: 409 },

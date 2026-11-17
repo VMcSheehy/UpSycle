@@ -6,6 +6,8 @@ import { requireSellerPageAuth, sellerAuthFailureMessage } from "@/lib/seller-au
 import { formatPriceCents, stockLabel } from "@/lib/format";
 import InventoryAdjuster from "@/components/seller/InventoryAdjuster";
 import PriorityControl from "@/components/seller/PriorityControl";
+import BillingBanner from "@/components/seller/BillingBanner";
+import { findSellerBillingRecord } from "@/lib/stripe-subscription-sync";
 
 export const metadata: Metadata = {
   title: "My Products — UpSycle Market",
@@ -43,6 +45,7 @@ export default async function SellerProductsPage() {
     );
   }
 
+  const billing = await findSellerBillingRecord({ sellerProfileId: auth.seller.sellerProfileId });
   const products = await prisma.product.findMany({
     where: { sellerProfileId: auth.seller.sellerProfileId },
     orderBy: { marketingPriority: "asc" },
@@ -68,6 +71,9 @@ export default async function SellerProductsPage() {
           <Link href="/sell/marketing" className="btn-secondary">
             Marketing
           </Link>
+          <Link href="/sell/billing" className="btn-secondary">
+            Billing
+          </Link>
           <Link href="/sell/profile" className="btn-secondary">
             Shop Settings
           </Link>
@@ -76,6 +82,8 @@ export default async function SellerProductsPage() {
           </Link>
         </div>
       </div>
+
+      <BillingBanner record={billing} />
 
       {products.length === 0 ? (
         <div className="border border-[var(--border)] bg-[var(--charcoal)] p-10 text-center">

@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/current-user";
-import { isApprovedSellerStatus } from "@/lib/public-catalog";
+import { listingSubscriptionSelect, sellerListingsArePublic } from "@/lib/public-catalog";
 import { validateQuestionInput } from "@/lib/validation/question";
 
 interface AskQuestionInput {
@@ -28,9 +28,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const product = await prisma.product.findUnique({
     where: { id },
-    select: { id: true, sellerProfile: { select: { approvalStatus: true } } },
+    select: {
+      id: true,
+      sellerProfile: { select: { approvalStatus: true, subscription: { select: listingSubscriptionSelect } } },
+    },
   });
-  if (!product || !isApprovedSellerStatus(product.sellerProfile.approvalStatus)) {
+  if (!product || !sellerListingsArePublic(product.sellerProfile)) {
     return NextResponse.json({ errors: ["Product not found."] }, { status: 404 });
   }
 

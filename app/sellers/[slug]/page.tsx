@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import ProductCard from "@/components/ProductCard";
 import { sellerDisplayName } from "@/lib/format";
+import { listingSubscriptionSelect, sellerListingsArePublic } from "@/lib/public-catalog";
 
 // Always fetched live from the DB — no build-time prerender.
 export const dynamic = "force-dynamic";
@@ -21,10 +22,13 @@ export default async function SellerStorefrontPage({ params, searchParams }: Sel
 
   const sellerProfile = await prisma.sellerProfile.findUnique({
     where: { slug },
-    include: { user: { select: { firstName: true, lastName: true, email: true } } },
+    include: {
+      user: { select: { firstName: true, lastName: true, email: true } },
+      subscription: { select: listingSubscriptionSelect },
+    },
   });
 
-  if (!sellerProfile || sellerProfile.approvalStatus !== "APPROVED") {
+  if (!sellerProfile || !sellerListingsArePublic(sellerProfile)) {
     notFound();
   }
 

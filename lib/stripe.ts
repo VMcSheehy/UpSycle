@@ -1,10 +1,8 @@
 import Stripe from "stripe";
 
-// Lazy singleton, mirroring lib/cognito.ts's pattern: read the env var only
-// when a route actually needs it, so the app still builds/boots without a
-// real Stripe account provisioned yet. Stripe Connect is NOT provisioned for
-// this MVP pass — see app/api/checkout/route.ts for the payout-approach
-// tradeoff this was built against.
+// One Stripe client per process. The key is read when a route needs it, so
+// the app still builds without a Stripe account. Pass a restricted key
+// (rk_test_ / rk_live_) when you can. Do not log the key.
 let client: Stripe | undefined;
 
 export function getStripeClient(): Stripe {
@@ -15,7 +13,10 @@ export function getStripeClient(): Stripe {
         "STRIPE_SECRET_KEY is not configured. Set it in .env once a Stripe account is provisioned.",
       );
     }
-    client = new Stripe(key, { apiVersion: "2025-02-24.acacia" });
+    client = new Stripe(key, {
+      apiVersion: "2026-09-30.endive",
+      typescript: true,
+    });
   }
   return client;
 }

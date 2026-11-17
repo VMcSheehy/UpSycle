@@ -11,7 +11,7 @@ import {
   sellerDisplayName,
   stockLabel,
 } from "@/lib/format";
-import { isApprovedSellerStatus } from "@/lib/public-catalog";
+import { listingSubscriptionSelect, sellerListingsArePublic } from "@/lib/public-catalog";
 
 // Always fetched live from the DB — no build-time prerender.
 export const dynamic = "force-dynamic";
@@ -30,6 +30,7 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
       photos: { orderBy: { position: "asc" } },
       sellerProfile: {
         include: {
+          subscription: { select: listingSubscriptionSelect },
           user: {
             select: {
               id: true,
@@ -52,7 +53,7 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
     },
   });
 
-  if (!product || !isApprovedSellerStatus(product.sellerProfile.approvalStatus)) {
+  if (!product || !sellerListingsArePublic(product.sellerProfile)) {
     notFound();
   }
 

@@ -19,9 +19,9 @@ export const dynamic = "force-dynamic";
 export default async function SellerSignupPage() {
   const auth = await resolveSellerAuth();
 
-  // Already a live (approved) seller — nothing to apply for.
+  // Approved sellers pick a plan and start Checkout from billing, not the application.
   if (auth.ok) {
-    redirect("/sell/products");
+    redirect("/sell/billing");
   }
 
   // Already applied (pending) or previously suspended — has a SellerProfile

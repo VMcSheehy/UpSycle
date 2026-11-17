@@ -23,6 +23,11 @@ import { fulfillPlacementSlot } from "@/lib/placement-fulfillment";
 import { PAID_SLOT_COUNT, placementSlotPriceCents } from "@/lib/placement";
 import { parseStoredCartLines } from "@/lib/stored-cart";
 import { paymentIntentIdFromSession, refundStripePayment } from "@/lib/stripe-refund";
+import {
+  applyStripeBillingSignal,
+  invoiceSubscriptionId,
+  snapshotFromSubscription,
+} from "@/lib/stripe-subscription-sync";
 
 export async function POST(request: NextRequest) {
   const signature = request.headers.get("stripe-signature");
@@ -41,11 +46,87 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
   }
 
-  if (event.type !== "checkout.session.completed") {
+  if (event.type === "checkout.session.expired") {
+    const session = event.data.object as Stripe.Checkout.Session;
+    if (session.metadata?.kind === "seller_subscription") {
+      await prisma.foundingOfferClaim.updateMany({
+        where: { stripeCheckoutSessionId: session.id, status: "PENDING" },
+        data: { status: "RELEASED" },
+      });
+    }
+    return NextResponse.json({ received: true });
+  }
+
+  if (
+    event.type === "customer.subscription.created" ||
+    event.type === "customer.subscription.updated" ||
+    event.type === "customer.subscription.deleted" ||
+    event.type === "customer.subscription.trial_will_end"
+  ) {
+    const subscription = event.data.object as Stripe.Subscription;
+    const snapshot = await snapshotFromSubscription(subscription, event.type === "customer.subscription.deleted");
+    const outcome = await applyStripeBillingSignal(
+      { kind: "subscription", eventId: event.id, snapshot },
+      event.type,
+    );
+    if (outcome === "retry") {
+      return NextResponse.json({ error: "Seller subscription is not ready to record." }, { status: 500 });
+    }
+    return NextResponse.json({ received: true, outcome });
+  }
+
+  if (event.type === "invoice.paid" || event.type === "invoice.payment_failed") {
+    const invoice = event.data.object as Stripe.Invoice;
+    const subscriptionId = invoiceSubscriptionId(invoice);
+    if (!subscriptionId) return NextResponse.json({ received: true, ignored: "no_subscription" });
+    const subscription = await getStripeClient().subscriptions.retrieve(subscriptionId);
+    const sellerProfileId = subscription.metadata.sellerProfileId;
+    if (!sellerProfileId) {
+      return NextResponse.json({ error: "Seller subscription is not ready to record." }, { status: 500 });
+    }
+    const outcome = await applyStripeBillingSignal(
+      {
+        kind: event.type === "invoice.paid" ? "invoice_paid" : "invoice_payment_failed",
+        eventId: event.id,
+        sellerProfileId,
+      },
+      event.type,
+    );
+    if (outcome === "retry") {
+      return NextResponse.json({ error: "Seller subscription is not ready to record." }, { status: 500 });
+    }
+    return NextResponse.json({ received: true, outcome });
+  }
+
+  if (event.type !== "checkout.session.completed" && event.type !== "checkout.session.async_payment_succeeded") {
     return NextResponse.json({ received: true });
   }
 
   const session = event.data.object as Stripe.Checkout.Session;
+  if (session.mode === "subscription" || session.metadata?.kind === "seller_subscription") {
+    const subscriptionId =
+      typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
+    if (!subscriptionId) {
+      return NextResponse.json({ error: "Subscription checkout is missing a subscription." }, { status: 500 });
+    }
+    const subscription = await getStripeClient().subscriptions.retrieve(subscriptionId, {
+      expand: ["items.data.price", "discounts"],
+    });
+    const snapshot = await snapshotFromSubscription(subscription, false);
+    const outcome = await applyStripeBillingSignal(
+      { kind: "subscription", eventId: event.id, snapshot },
+      event.type,
+    );
+    if (outcome === "retry") {
+      return NextResponse.json({ error: "Seller subscription is not ready to record." }, { status: 500 });
+    }
+    return NextResponse.json({ received: true, outcome });
+  }
+
+  if (event.type !== "checkout.session.completed") {
+    return NextResponse.json({ received: true });
+  }
+
   const metadata = session.metadata ?? {};
   const stripePaymentId = paymentIntentIdFromSession(session.payment_intent) ?? session.id;
 

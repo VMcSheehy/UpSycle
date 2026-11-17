@@ -7,6 +7,7 @@ import {
   type PendingCheckoutPatch,
   type PendingCheckoutState,
 } from "@/lib/checkout-fulfillment";
+import { publicSellerWhere } from "@/lib/public-catalog";
 import type { StoredCartLine } from "@/lib/stored-cart";
 
 function line(overrides: Partial<StoredCartLine> = {}): StoredCartLine {
@@ -259,11 +260,12 @@ describe("fulfillPaidCart", () => {
     expect(cart.refunds).toEqual([2200]);
   });
 
-  it("requires remaining stock and an approved seller before decrementing", () => {
-    expect(stockDecrementWhere("product-1", 2)).toEqual({
+  it("requires remaining stock and a seller in good billing standing before decrementing", () => {
+    const now = new Date("2026-06-01T00:00:00.000Z");
+    expect(stockDecrementWhere("product-1", 2, now)).toEqual({
       id: "product-1",
       inventoryCount: { gte: 2 },
-      sellerProfile: { approvalStatus: "APPROVED" },
+      sellerProfile: publicSellerWhere(now),
     });
   });
 });

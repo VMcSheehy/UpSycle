@@ -20,11 +20,11 @@
 // override UI, and the page templates can't drift from each other.
 import {
   PlacementPageType,
-  SellerApprovalStatus,
   SellerTier,
   type Prisma,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { publicSellerWhere } from "@/lib/public-catalog";
 import {
   LOTTERY_WINNER_COUNT,
   PAID_SLOT_COUNT,
@@ -76,7 +76,7 @@ function pickRandom<T>(pool: readonly T[], count: number): T[] {
 /** HOME eligibility: any APPROVED seller with >=1 Product, any tier. Also used (unfiltered by category) as HOME's paid-slot random-fill pool. */
 async function eligibleHomeSellers(tx: Tx): Promise<string[]> {
   const rows = await tx.sellerProfile.findMany({
-    where: { approvalStatus: SellerApprovalStatus.APPROVED, products: { some: {} } },
+    where: { ...publicSellerWhere(), products: { some: {} } },
     select: { id: true },
   });
   return rows.map((r) => r.id);
@@ -95,7 +95,7 @@ async function eligibleSellersByCategoryIds(
 ): Promise<string[]> {
   const rows = await tx.sellerProfile.findMany({
     where: {
-      approvalStatus: SellerApprovalStatus.APPROVED,
+      ...publicSellerWhere(),
       ...(tier ? { tier } : {}),
       products: { some: { categoryId: { in: categoryIds } } },
     },

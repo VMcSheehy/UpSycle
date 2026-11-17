@@ -1,4 +1,5 @@
 import { orderTotalCents, paymentIsPaidAndMatches, type StoredCartLine } from "@/lib/stored-cart";
+import { publicSellerWhere } from "@/lib/public-catalog";
 
 export interface PendingCheckoutState {
   status: "OPEN" | "FULFILLED" | "REFUNDED";
@@ -195,10 +196,10 @@ export async function fulfillPaidCart(input: CartFulfillmentInput): Promise<Cart
 
 // Prisma filter for the production stock update. A line is taken only when
 // enough units remain and the seller is still approved.
-export function stockDecrementWhere(productId: string, quantity: number) {
+export function stockDecrementWhere(productId: string, quantity: number, now = new Date()) {
   return {
     id: productId,
     inventoryCount: { gte: quantity },
-    sellerProfile: { approvalStatus: "APPROVED" as const },
+    sellerProfile: publicSellerWhere(now),
   };
 }

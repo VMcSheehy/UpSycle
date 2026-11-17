@@ -49,7 +49,7 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
     }
   }
 
-  const where: Prisma.ProductWhereInput = { ...publiclyListedProductWhere };
+  const where: Prisma.ProductWhereInput = { ...publiclyListedProductWhere() };
 
   if (categoryIds) {
     where.categoryId = { in: categoryIds };
