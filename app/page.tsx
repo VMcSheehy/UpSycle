@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { getActivePlacementPeriod, resolveFeaturedProduct } from "@/lib/placement";
 import ProductCard from "@/components/ProductCard";
 import FeaturedBadge from "@/components/FeaturedBadge";
+import { formatTierPrice, startingPlan } from "@/lib/tiers";
+
+const artistPlanPrice = formatTierPrice(startingPlan().monthlyPriceCents);
 
 // Featured products below are fetched live from the DB, so this page can't
 // be statically generated at build time (no DATABASE_URL available then).
@@ -48,14 +51,14 @@ const howItWorksCards = [
     type: "For Artists",
     title: "Your Craft, Your Platform",
     desc: "List your work in a space built specifically for makers. No competing with factory goods. No getting lost in a catalog of millions.",
-    feeAmount: "$19.99",
+    feeAmount: artistPlanPrice,
     feeLabel: "per month · flat subscription, no per-sale commissions",
   },
   {
     num: "03",
     type: "Payments",
     title: "Simple, Transparent Pricing",
-    desc: "No hidden fees. Buyers pay 6% at checkout. Artists pay $19.99/month. Every dollar is clear so makers can focus on creating.",
+    desc: `No hidden fees. Buyers pay 6% at checkout. Artists pay ${artistPlanPrice}/month. Every dollar is clear so makers can focus on creating.`,
     feeAmount: "Stripe",
     feeLabel: "secure processing · fast payouts",
   },
@@ -202,6 +205,22 @@ export default async function Home() {
           </div>
         </div>
       </section>
+
+      {/* Slim maker note. Full plan prices live on /sell, not here. */}
+      <Link
+        href="/sell"
+        className="block bg-[#FFEBE4] no-underline"
+        style={{ color: "#000000" }}
+      >
+        <div className="sec-max flex flex-col items-start justify-between gap-4 px-6 py-[18px] sm:flex-row sm:items-center md:px-14">
+          <p className="text-[0.92rem] font-medium tracking-[0.02em] text-[#000000]">
+            Sell your handmade work, plans from <strong className="font-semibold">{artistPlanPrice}/mo</strong>
+          </p>
+          <span className="inline-flex shrink-0 items-center justify-center bg-[#000000] px-5 py-3 text-[0.68rem] font-semibold tracking-[0.18em] text-[#FFEBE4] uppercase">
+            See seller plans
+          </span>
+        </div>
+      </Link>
 
       {/* ═══ HOW WE ARE DIFFERENT ═══ */}
       <section className="bg-[var(--charcoal)] px-6 py-24 md:px-14">

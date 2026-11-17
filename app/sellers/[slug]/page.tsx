@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import ProductCard from "@/components/ProductCard";
+import ShareLink from "@/components/ShareLink";
 import { sellerDisplayName } from "@/lib/format";
 
 // Always fetched live from the DB — no build-time prerender.
@@ -53,10 +54,15 @@ export default async function SellerStorefrontPage({ params, searchParams }: Sel
   return (
     <section className="px-6 py-28 md:px-14">
       <div className="sec-max">
-        <div className="eyebrow">Seller</div>
-        <h2 className="sec-title">
-          Shop <em>{name}</em>
-        </h2>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <div className="eyebrow">Seller</div>
+            <h2 className="sec-title mb-0">
+              Shop <em>{name}</em>
+            </h2>
+          </div>
+          <ShareLink title={`Shop ${name} on UpSycle Market`} path={`/sellers/${slug}`} />
+        </div>
         {sellerProfile.story && (
           <p className="mt-4 max-w-2xl text-[0.9rem] font-light leading-loose whitespace-pre-line text-[var(--muted2)]">
             {sellerProfile.story}

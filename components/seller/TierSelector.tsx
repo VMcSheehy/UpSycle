@@ -2,18 +2,13 @@
 
 import { useState } from "react";
 import type { SellerTier } from "@prisma/client";
+import { SELLER_PLANS, formatTierPrice, planById, type SellerTierId } from "@/lib/tiers";
 
 const labelClass =
   "mb-2 block text-[0.65rem] font-medium tracking-[0.13em] uppercase text-[var(--muted)]";
 
-const TIER_OPTIONS: { value: SellerTier; label: string }[] = [
-  { value: "TIER_1", label: "Tier 1" },
-  { value: "TIER_2", label: "Tier 2" },
-  { value: "TIER_3", label: "Tier 3" },
-];
-
 function tierLabel(tier: SellerTier): string {
-  return TIER_OPTIONS.find((option) => option.value === tier)?.label ?? tier;
+  return planById(tier as SellerTierId).tierLabel;
 }
 
 export default function TierSelector({ initialTier }: { initialTier: SellerTier }) {
@@ -55,29 +50,33 @@ export default function TierSelector({ initialTier }: { initialTier: SellerTier 
       </p>
 
       <div className="mt-4 space-y-3">
-        {TIER_OPTIONS.map((option) => (
+        {SELLER_PLANS.map((plan) => (
           <label
-            key={option.value}
+            key={plan.id}
             className="flex cursor-pointer items-center gap-3 border border-[var(--border)] bg-[var(--panel2)] px-4 py-3 text-sm text-[var(--cream)] transition-colors has-[:checked]:border-[var(--rg-core)]"
           >
             <input
               type="radio"
               name="seller-tier"
-              value={option.value}
-              checked={tier === option.value}
+              value={plan.id}
+              checked={tier === plan.id}
               onChange={() => {
-                setTier(option.value);
+                setTier(plan.id);
                 setSuccess(false);
               }}
             />
-            {option.label}
+            <span className="flex-1">
+              {plan.tierLabel} · {plan.name}
+              {plan.popular ? " · Most popular" : ""}
+            </span>
+            <span className="text-[var(--muted2)]">{formatTierPrice(plan.monthlyPriceCents)}/mo</span>
           </label>
         ))}
       </div>
 
       <p className="mt-4 text-[0.75rem] font-light italic text-[var(--muted2)]">
-        Pricing, benefits, and billing for each tier are still being finalized. Changing your
-        tier here has no billing effect yet.
+        Changing your tier here has no billing effect yet. The free trial and plan features are
+        not enforced.
       </p>
 
       <div className="mt-3 flex items-center gap-4">

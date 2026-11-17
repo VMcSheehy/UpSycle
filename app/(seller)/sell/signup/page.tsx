@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/current-user";
 import { resolveSellerAuth } from "@/lib/seller-auth";
 import type { AddressInput } from "@/lib/validation/sellerSignup";
+import { isSellerTierId } from "@/lib/tiers";
 
 export const metadata: Metadata = {
   title: "Sell on UpSycle Market — Seller Signup",
@@ -15,7 +16,13 @@ export const metadata: Metadata = {
 // Always fetched live — branches on the current session (see below).
 export const dynamic = "force-dynamic";
 
-export default async function SellerSignupPage() {
+export default async function SellerSignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ plan?: string }>;
+}) {
+  const { plan } = await searchParams;
+  const initialTier = isSellerTierId(plan) ? plan : undefined;
   const auth = await resolveSellerAuth();
 
   // Already a live (approved) seller — nothing to apply for.
@@ -70,7 +77,7 @@ export default async function SellerSignupPage() {
           will be created in a pending state until an admin reviews your application.
         </p>
       </div>
-      <SellerSignupForm existingAccount={existingAccount} />
+      <SellerSignupForm existingAccount={existingAccount} initialTier={initialTier} />
     </div>
   );
 }
