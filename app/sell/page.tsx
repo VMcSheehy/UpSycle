@@ -49,6 +49,15 @@ const steps = [
   },
 ];
 
+const sharePlaces = [
+  "Instagram",
+  "Facebook",
+  "Pinterest",
+  "TikTok",
+  "Your website",
+  "Craft fairs",
+];
+
 const highlightSlots: { pageType: PlacementPageType; name: string; detail: string }[] = [
   {
     pageType: "HOME",
@@ -92,7 +101,8 @@ export default function SellPage() {
           </h1>
           <p className="mx-auto mt-3 max-w-xl text-[0.95rem] leading-relaxed text-[rgba(255,235,228,0.72)]">
             A curated marketplace for independent artists only. Created By US, Treasured By You.
-            Choose the plan that fits your shop. Every plan includes a {TRIAL_DAYS}-day free trial.
+            Your shop goes wherever you do. Choose the plan that fits your shop. Every plan includes
+            a {TRIAL_DAYS}-day free trial.
           </p>
         </div>
       </section>
@@ -114,6 +124,33 @@ export default function SellPage() {
               </li>
             ))}
           </ol>
+        </div>
+      </section>
+
+      <section id="sell-everywhere" className="px-6 pb-16 md:px-14">
+        <div className="sec-max border border-[rgba(199,138,110,0.4)] bg-[#000000] px-6 py-10 md:px-12 md:py-12">
+          <div className="eyebrow">Your shop</div>
+          <h2 className="sec-title">Sell everywhere</h2>
+          <p className="max-w-2xl text-[0.97rem] leading-relaxed text-[rgba(255,235,228,0.72)]">
+            Your UpSycle shop goes wherever you do. The page is easy to read on a phone and on a
+            computer. Every shop and every piece has its own link. The share button on the page
+            opens the share sheet when your browser has one, and copies the link when it does not.
+          </p>
+          <ul className="mt-6 flex list-none flex-wrap gap-2">
+            {sharePlaces.map((place) => (
+              <li
+                key={place}
+                className="border border-[#C78A6E] bg-[#000000] px-3 py-1.5 text-[0.62rem] font-semibold tracking-[0.14em] text-[#FFEBE4] uppercase"
+              >
+                {place}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-6 max-w-2xl text-[0.95rem] leading-relaxed text-[#FFEBE4]">
+            Take the link to Instagram, Facebook, Pinterest, TikTok, your own website, or a card at
+            a craft fair. A buyer opens it and shops. UpSycle ships within the United States, and
+            the shipping rate is on the listing.
+          </p>
         </div>
       </section>
 

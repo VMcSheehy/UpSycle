@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import AddToCartButton from "@/components/AddToCartButton";
 import ProductGallery from "@/components/ProductGallery";
 import ProductQA from "@/components/ProductQA";
+import ShareLink from "@/components/ShareLink";
 import { getCurrentUser } from "@/lib/current-user";
 import {
   formatPriceCents,
@@ -89,9 +90,12 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
             >
               {sellerDisplayName(product.sellerProfile)}
             </Link>
-            <h1 className="mb-4 font-serif text-[clamp(1.8rem,3vw,2.6rem)] font-normal leading-tight text-[var(--cream)]">
-              {product.title}
-            </h1>
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+              <h1 className="font-serif text-[clamp(1.8rem,3vw,2.6rem)] font-normal leading-tight text-[var(--cream)]">
+                {product.title}
+              </h1>
+              <ShareLink title={product.title} path={`/products/${product.id}`} />
+            </div>
             <div className="grad-text mb-6 font-serif text-[2rem] font-semibold">
               {formatPriceCents(product.priceCents)}
             </div>
