@@ -1,4 +1,5 @@
 import * as cdk from "aws-cdk-lib";
+import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 import * as lambda from "aws-cdk-lib/aws-lambda";
@@ -9,6 +10,8 @@ import * as path from "path";
 
 export interface PlacementStackProps extends cdk.StackProps {
   dbSecret: secretsmanager.ISecret;
+  vpc: ec2.IVpc;
+  placementLambdaSecurityGroup: ec2.ISecurityGroup;
 }
 
 /**
@@ -75,6 +78,11 @@ export class PlacementStack extends cdk.Stack {
       projectRoot: appRoot,
       timeout: cdk.Duration.minutes(5),
       memorySize: 512,
+      // RDS is private. The function runs in the NAT-backed private subnets
+      // so it can reach the database and Secrets Manager.
+      vpc: props.vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      securityGroups: [props.placementLambdaSecurityGroup],
       environment: {
         DB_SECRET_ARN: props.dbSecret.secretArn,
       },

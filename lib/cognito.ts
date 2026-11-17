@@ -1,5 +1,6 @@
 import {
   AdminDeleteUserCommand,
+  AdminGetUserCommand,
   AuthFlowType,
   CognitoIdentityProviderClient,
   ConfirmForgotPasswordCommand,
@@ -170,20 +171,32 @@ export async function confirmForgotPassword(email: string, code: string, newPass
 }
 
 /**
- * Compensating action for the seller-signup saga: if the Postgres
- * transaction that follows Cognito signUp fails, the app is left with a
- * Cognito user that has no matching database row. Deleting it here lets the
- * applicant retry signup with the same email instead of hitting
- * "user already exists". Best-effort only — failures are logged, not
- * thrown, so the original DB error is still what the caller sees/returns.
+ * Compensating action when Postgres fails after Cognito signUp (buyer or
+ * seller). Deletes the Cognito user so the same email can try again.
+ * Confirmed users are left alone — this never removes an account that has
+ * already verified its email. Returns true only when the user was deleted.
+ * Failures are logged, not thrown, so the original DB error is still what
+ * the caller sees.
  */
-export async function deleteUnconfirmedUser(email: string): Promise<void> {
+export async function deleteUnconfirmedUser(email: string): Promise<boolean> {
   try {
+    const existing = await getClient().send(
+      new AdminGetUserCommand({ UserPoolId: getUserPoolId(), Username: email }),
+    );
+    if (existing.UserStatus !== "UNCONFIRMED") {
+      console.error("Refusing to delete a Cognito user that is not unconfirmed", {
+        email,
+        status: existing.UserStatus,
+      });
+      return false;
+    }
     await getClient().send(
       new AdminDeleteUserCommand({ UserPoolId: getUserPoolId(), Username: email }),
     );
+    return true;
   } catch (err) {
     console.error("Failed to roll back Cognito user after a DB error:", err);
+    return false;
   }
 }
 

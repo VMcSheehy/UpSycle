@@ -4,7 +4,8 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSellerPageAuth, sellerAuthFailureMessage } from "@/lib/seller-auth";
 import ShopStoryEditor from "@/components/seller/ShopStoryEditor";
-import TierSelector from "@/components/seller/TierSelector";
+import BillingBanner, { currentPlanSummary } from "@/components/seller/BillingBanner";
+import { findSellerBillingRecord } from "@/lib/stripe-subscription-sync";
 
 export const metadata: Metadata = {
   title: "Shop Settings — UpSycle Market",
@@ -40,10 +41,13 @@ export default async function SellerProfilePage() {
     );
   }
 
-  const sellerProfile = await prisma.sellerProfile.findUniqueOrThrow({
-    where: { id: auth.seller.sellerProfileId },
-    select: { slug: true, story: true, tier: true },
-  });
+  const [sellerProfile, billing] = await Promise.all([
+    prisma.sellerProfile.findUniqueOrThrow({
+      where: { id: auth.seller.sellerProfileId },
+      select: { slug: true, story: true },
+    }),
+    findSellerBillingRecord({ sellerProfileId: auth.seller.sellerProfileId }),
+  ]);
 
   return (
     <div>
@@ -64,8 +68,18 @@ export default async function SellerProfilePage() {
         <ShopStoryEditor initialStory={sellerProfile.story ?? ""} />
       </div>
 
-      <div className="mt-8 border border-[var(--border)] bg-[var(--charcoal)] p-6 md:p-8">
-        <TierSelector initialTier={sellerProfile.tier} />
+      <div className="mt-8">
+        <BillingBanner record={billing} />
+        <div className="border border-[var(--border)] bg-[var(--charcoal)] p-6 md:p-8">
+          <p className="text-[0.65rem] font-medium tracking-[0.13em] text-[var(--muted)] uppercase">Current plan</p>
+          <p className="mt-2 text-[0.95rem] text-[var(--cream)]">{currentPlanSummary(billing)}</p>
+          <p className="mt-3 text-[0.85rem] font-light text-[var(--muted2)]">
+            Your tier changes only after Stripe confirms the subscription. Manage the card, switch plans, or cancel at the end of the period from billing.
+          </p>
+          <Link href="/sell/billing" className="btn-secondary mt-4 inline-block">
+            Open billing
+          </Link>
+        </div>
       </div>
     </div>
   );

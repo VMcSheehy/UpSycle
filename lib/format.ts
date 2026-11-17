@@ -1,5 +1,6 @@
 // Small formatting helpers shared by listing/detail pages so price, weight,
 // and stock-level copy stay consistent everywhere they're rendered.
+import { planById, type SellerTierId } from "@/lib/tiers";
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -62,17 +63,10 @@ export function sellerDisplayName(seller: {
   return name.length > 0 ? name : seller.user.email.split("@")[0];
 }
 
-type SellerTierValue = "TIER_1" | "TIER_2" | "TIER_3";
-
-const TIER_LABELS: Record<SellerTierValue, string> = {
-  TIER_1: "Tier 1",
-  TIER_2: "Tier 2",
-  TIER_3: "Tier 3",
-};
-
-/** Human-readable label for SellerProfile.tier, shared by the admin sellers table and the seller dashboard. */
-export function sellerTierLabel(tier: SellerTierValue): string {
-  return TIER_LABELS[tier];
+/** Human-readable label for a seller tier, shared by the admin sellers table and the seller dashboard. */
+export function sellerTierLabel(tier: SellerTierId): string {
+  const plan = planById(tier);
+  return `${plan.tierLabel} · ${plan.name}`;
 }
 
 type ShippingStatusValue = "PENDING_SHIPMENT" | "SHIPPED" | "DELIVERED" | "CANCELLED";

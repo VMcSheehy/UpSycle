@@ -16,21 +16,18 @@ import {
   TierChangeReason,
 } from "@prisma/client";
 import { CATEGORY_TREE } from "../lib/categories";
+import { planById } from "../lib/tiers";
 
 const prisma = new PrismaClient();
 
-// Mirrors prisma/migrations/20260930120000_add_tier_subscription_system's
-// hand-written data backfill (that migration seeds these same values via raw
-// SQL for the existing prod DB) — kept in sync so a fresh `migrate reset &&
-// db seed` on a new dev DB reaches the same state without going through that
-// migration's INSERT statements. Tier 2/3 are placeholder-zero benefits with
-// isPricingFinalized: false because Prompts/Tier_system.md never defines
-// them — see the TierPlan model comment in schema.prisma.
+// Monthly prices come from lib/tiers.ts so the seed matches the public plans
+// and the Stripe lookup keys. Benefit columns for Tier 2 and Tier 3 are still
+// not enforced by the shop.
 const TIER_PLANS = [
   {
     tier: SellerTier.TIER_1,
-    name: "Tier 1",
-    monthlyPriceCents: 3999,
+    name: planById("TIER_1").name,
+    monthlyPriceCents: planById("TIER_1").monthlyPriceCents,
     quarterlySalesTargetCents: 200_000,
     lotteryEntriesPerPeriod: 1,
     socialPostsPerPeriod: 1,
@@ -40,8 +37,8 @@ const TIER_PLANS = [
   },
   {
     tier: SellerTier.TIER_2,
-    name: "Tier 2",
-    monthlyPriceCents: 2999,
+    name: planById("TIER_2").name,
+    monthlyPriceCents: planById("TIER_2").monthlyPriceCents,
     quarterlySalesTargetCents: 50_000,
     lotteryEntriesPerPeriod: 0,
     socialPostsPerPeriod: 0,
@@ -51,8 +48,8 @@ const TIER_PLANS = [
   },
   {
     tier: SellerTier.TIER_3,
-    name: "Tier 3",
-    monthlyPriceCents: 1999,
+    name: planById("TIER_3").name,
+    monthlyPriceCents: planById("TIER_3").monthlyPriceCents,
     quarterlySalesTargetCents: 0,
     lotteryEntriesPerPeriod: 0,
     socialPostsPerPeriod: 0,

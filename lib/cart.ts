@@ -29,26 +29,14 @@ export interface CheckoutCartItem extends CartItem {
   fulfillmentMethod?: "SHIP" | "PICKUP";
 }
 
-/** A cart line re-priced/validated server-side, ready to charge and to
- * snapshot into an OrderItem. */
-export interface ValidatedCartLine {
-  productId: string;
-  quantity: number;
-  unitPriceCents: number;
-  shippingCostCents: number; // 0 when fulfillmentMethod is "PICKUP"
-  sellerProfileId: string;
-  title: string;
-  fulfillmentMethod: "SHIP" | "PICKUP";
-}
-
 export const CART_STORAGE_KEY = "upsycle_cart_v1";
 /** window CustomEvent name dispatched on every cart mutation so any mounted
  * component (header badge, cart page) can re-read localStorage and update. */
 export const CART_EVENT = "upsycle:cart-updated";
 
 export const MAX_QUANTITY_PER_LINE = 20;
-/** Keeps the Stripe Checkout Session metadata payload (500 chars/key) safe —
- * see encodeCartMetadataItems below. Generous for a handcrafted-goods cart. */
+/** Enforced again by app/api/checkout/route.ts. The cart is stored as a
+ * PendingCheckout row, not packed into a Stripe metadata field. */
 export const MAX_CART_LINES = 15;
 
 function isBrowser(): boolean {
@@ -155,74 +143,3 @@ export function subscribeToCart(callback: () => void): () => void {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Stripe Checkout Session metadata encoding
-// ---------------------------------------------------------------------------
-//
-// We snapshot the *server-validated* price/shipping/seller numbers (computed
-// once in app/api/checkout/route.ts against live Product rows) into the
-// Checkout Session's metadata, rather than re-querying Product prices again
-// in the webhook handler. That guarantees the Order/OrderItem rows created
-// on payment confirmation always reflect exactly what Stripe charged, even
-// if a seller edits a Product's price in the (short) window between
-// Checkout Session creation and payment completion.
-//
-// Format: `productId:quantity:unitPriceCents:shippingCostCents:sellerProfileId:F`
-// lines joined by `|`, where F is a single-char fulfillment code ("S"/"P").
-// Kept deliberately compact — Stripe metadata values are capped at 500
-// characters per key.
-const LINE_FIELD_SEP = ":";
-const LINE_SEP = "|";
-
-const FULFILLMENT_CODE: Record<"SHIP" | "PICKUP", string> = { SHIP: "S", PICKUP: "P" };
-const FULFILLMENT_FROM_CODE: Record<string, "SHIP" | "PICKUP"> = { S: "SHIP", P: "PICKUP" };
-
-export function encodeCartMetadataItems(lines: ValidatedCartLine[]): string {
-  return lines
-    .map((l) =>
-      [
-        l.productId,
-        l.quantity,
-        l.unitPriceCents,
-        l.shippingCostCents,
-        l.sellerProfileId,
-        FULFILLMENT_CODE[l.fulfillmentMethod],
-      ].join(LINE_FIELD_SEP),
-    )
-    .join(LINE_SEP);
-}
-
-export interface DecodedCartLine {
-  productId: string;
-  quantity: number;
-  unitPriceCents: number;
-  shippingCostCents: number;
-  sellerProfileId: string;
-  fulfillmentMethod: "SHIP" | "PICKUP";
-}
-
-export function decodeCartMetadataItems(raw: string | null | undefined): DecodedCartLine[] {
-  if (!raw) return [];
-  return raw
-    .split(LINE_SEP)
-    .map((line) => line.split(LINE_FIELD_SEP))
-    .filter((parts) => parts.length === 6)
-    .map(([productId, quantity, unitPriceCents, shippingCostCents, sellerProfileId, fulfillmentCode]) => ({
-      productId,
-      quantity: Number.parseInt(quantity, 10),
-      unitPriceCents: Number.parseInt(unitPriceCents, 10),
-      shippingCostCents: Number.parseInt(shippingCostCents, 10),
-      sellerProfileId,
-      // Defensive default: never let an unrecognized/corrupt code silently
-      // waive a shipping charge — fall back to SHIP.
-      fulfillmentMethod: FULFILLMENT_FROM_CODE[fulfillmentCode] ?? "SHIP",
-    }))
-    .filter(
-      (line) =>
-        line.productId &&
-        line.sellerProfileId &&
-        Number.isFinite(line.quantity) &&
-        Number.isFinite(line.unitPriceCents) &&
-        Number.isFinite(line.shippingCostCents),
-    );
-}

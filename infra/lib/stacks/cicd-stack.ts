@@ -17,10 +17,16 @@ export interface CicdStackProps extends cdk.StackProps {
  * policy's `sub` condition to only this repo's `main` branch (not PRs, not
  * forks, not other branches).
  *
- * DeployRole doesn't need broad permissions of its own — `cdk deploy` needs
- * to assume the CDK bootstrap roles (`cdk-hnb659fds-*`) that already exist
- * in this account from `cdk bootstrap`, the same way the CDK CLI does when
- * run locally. DeployRole is only granted `sts:AssumeRole` on those four.
+ * The GitHub repository comes from props (default VMcSheehy/UpSycle in
+ * bin/infra.ts). The AWS account is this stack's CDK environment, which the
+ * GitHub workflow supplies via the AWS_ACCOUNT_ID variable. Neither Don's
+ * account nor donfouts/UpSycle is hardcoded here.
+ *
+ * DeployRole's own policy can only assume the four CDK bootstrap roles in
+ * this account and region. Those bootstrap roles are still powerful inside
+ * the account — that is how `cdk deploy` works — so this role should live
+ * in Victoria's own AWS account, not a shared one. It cannot call other
+ * AWS APIs directly.
  */
 export class CicdStack extends cdk.Stack {
   public readonly deployRole: iam.Role;

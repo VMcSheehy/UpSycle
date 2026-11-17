@@ -1,7 +1,9 @@
 import { cookies } from "next/headers";
 
 import { ACCESS_TOKEN_COOKIE, ID_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "@/lib/auth-constants";
+import { refreshCognitoTokens } from "@/lib/cognito-refresh";
 import type { SignInResult } from "@/lib/cognito";
+import { isJwtExpired } from "@/lib/jwt-expiry";
 
 // MVP session handling: store the Cognito tokens directly in httpOnly
 // cookies rather than issuing our own signed session. The ID token is
@@ -48,5 +50,29 @@ export async function clearSessionCookies(): Promise<void> {
 
 export async function getIdToken(): Promise<string | undefined> {
   const store = await cookies();
-  return store.get(ID_TOKEN_COOKIE)?.value;
+  const current = store.get(ID_TOKEN_COOKIE)?.value;
+  if (current && !isJwtExpired(current)) return current;
+
+  const refreshToken = store.get(REFRESH_TOKEN_COOKIE)?.value;
+  if (!refreshToken) return undefined;
+
+  try {
+    const tokens = await refreshCognitoTokens(refreshToken);
+    try {
+      await setSessionCookies({
+        idToken: tokens.idToken,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken ?? refreshToken,
+        expiresIn: tokens.expiresIn,
+      });
+    } catch (err) {
+      // Server Component renders cannot write cookies. The proxy persists
+      // them on navigation; this request can still use the new token.
+      console.error("Could not persist refreshed session cookies", err);
+    }
+    return tokens.idToken;
+  } catch (err) {
+    console.error("Failed to refresh Cognito session", err);
+    return undefined;
+  }
 }

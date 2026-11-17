@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { SellerTier } from "@prisma/client";
+import { uploadViaPresignedPost } from "@/lib/browser-upload";
+import { formatTierPrice, SELLER_PLANS, TRIAL_DAYS } from "@/lib/tiers";
 import {
   type AddressInput,
   MAX_STORY_LENGTH,
@@ -10,15 +12,6 @@ import {
   type SellerSignupInput,
   validateSellerSignup,
 } from "@/lib/validation/sellerSignup";
-
-const SELLER_TIER_PLACEHOLDER =
-  "Benefits and pricing for this tier are still being finalized — you'll be notified before anything changes.";
-
-const SELLER_TIERS: { value: SellerTier; label: string }[] = [
-  { value: "TIER_1", label: "Tier 1" },
-  { value: "TIER_2", label: "Tier 2" },
-  { value: "TIER_3", label: "Tier 3" },
-];
 
 interface PhotoSlot {
   file: File | null;
@@ -101,30 +94,11 @@ export default function SellerSignupForm({ existingAccount }: SellerSignupFormPr
 
   async function uploadPhoto(index: number, file: File) {
     try {
-      const presignRes = await fetch("/api/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, contentType: file.type }),
-      });
-      const presignData = await presignRes.json().catch(() => ({}));
-      if (!presignRes.ok) {
-        throw new Error(presignData?.error ?? "Failed to get an upload URL.");
-      }
-
-      const putRes = await fetch(presignData.uploadUrl as string, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!putRes.ok) {
-        throw new Error("Upload to storage failed.");
-      }
+      const fileUrl = await uploadViaPresignedPost(file, "seller-sample-photos");
 
       setPhotos((prev) =>
         prev.map((slot, i) =>
-          i === index
-            ? { ...slot, status: "done", uploadedUrl: presignData.fileUrl as string }
-            : slot,
+          i === index ? { ...slot, status: "done", uploadedUrl: fileUrl } : slot,
         ),
       );
     } catch (err) {
@@ -523,35 +497,45 @@ export default function SellerSignupForm({ existingAccount }: SellerSignupFormPr
 
       {/* SELLER TIER */}
       <div className={sectionClass}>
-        <h2 className={sectionHeadingClass}>Seller Tier</h2>
+        <h2 className={sectionHeadingClass}>Choose your plan</h2>
         <p className="mb-4 text-[0.78rem] font-light text-[var(--muted2)]">
-          Choose the tier you&apos;d like to apply under. Pricing and benefits for each tier are
-          still being finalized.
+          This is the plan you are applying for. Applying does not charge you. After approval you
+          start a {TRIAL_DAYS}-day free trial from your dashboard. Founding Artist sellers get 90
+          days free, then 50% off for 9 months.
         </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {SELLER_TIERS.map((option) => (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+          {SELLER_PLANS.map((plan) => (
             <label
-              key={option.value}
+              key={plan.id}
               className={`flex cursor-pointer flex-col gap-2 border p-4 transition-colors ${
-                tier === option.value
+                tier === plan.id
                   ? "border-[var(--rg-core)] bg-[var(--panel2)]"
                   : "border-[var(--border)] bg-[var(--panel2)] hover:border-[var(--rg-core)]"
               }`}
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span className="text-sm font-medium text-[var(--cream)]">
+                    {plan.tierLabel} · {plan.name}
+                  </span>
+                  {plan.popular && (
+                    <span className="mt-1 block text-[0.62rem] font-semibold tracking-[0.12em] text-[var(--rg-core)] uppercase">
+                      Most popular
+                    </span>
+                  )}
+                </div>
                 <input
                   type="radio"
                   name="tier"
-                  value={option.value}
-                  checked={tier === option.value}
-                  onChange={() => setTier(option.value)}
-                  className="accent-[var(--rg-core)]"
+                  value={plan.id}
+                  checked={tier === plan.id}
+                  onChange={() => setTier(plan.id)}
+                  className="mt-1 accent-[var(--rg-core)]"
+                  aria-label={`${plan.tierLabel} ${plan.name}`}
                 />
-                <span className="text-sm font-medium text-[var(--cream)]">{option.label}</span>
               </div>
-              <p className="text-[0.78rem] font-light text-[var(--muted2)]">
-                {SELLER_TIER_PLACEHOLDER}
-              </p>
+              <div className="text-[var(--rg-light)]">{formatTierPrice(plan.monthlyPriceCents)}/mo</div>
+              <p className="text-[0.78rem] font-light text-[var(--muted2)]">{plan.pickerSummary}</p>
             </label>
           ))}
         </div>

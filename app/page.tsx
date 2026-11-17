@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getActivePlacementPeriod, resolveFeaturedProduct } from "@/lib/placement";
+import { publiclyListedProductWhere } from "@/lib/public-catalog";
 import ProductCard from "@/components/ProductCard";
 import FeaturedBadge from "@/components/FeaturedBadge";
+import { formatTierPrice, startingPlan } from "@/lib/tiers";
+
+const artistPlanPrice = formatTierPrice(startingPlan().monthlyPriceCents);
 
 // Featured products below are fetched live from the DB, so this page can't
 // be statically generated at build time (no DATABASE_URL available then).
@@ -40,22 +44,22 @@ const howItWorksCards = [
     type: "For Buyers",
     title: "Discover Work You'll Treasure",
     desc: "Browse curated, upcycled and handmade pieces — each with the artist's full story behind it. Every item is one-of-a-kind. When it's gone, it's gone.",
-    feeAmount: "6%",
-    feeLabel: "service fee at checkout · transparent & simple",
+    feeAmount: "$0",
+    feeLabel: "buyer service fee · you pay the item price and the seller's shipping",
   },
   {
     num: "02",
     type: "For Artists",
     title: "Your Craft, Your Platform",
     desc: "List your work in a space built specifically for makers. No competing with factory goods. No getting lost in a catalog of millions.",
-    feeAmount: "$19.99",
+    feeAmount: artistPlanPrice,
     feeLabel: "per month · flat subscription, no per-sale commissions",
   },
   {
     num: "03",
     type: "Payments",
     title: "Simple, Transparent Pricing",
-    desc: "No hidden fees. Buyers pay 6% at checkout. Artists pay $19.99/month. Every dollar is clear so makers can focus on creating.",
+    desc: `No hidden fees. Buyers pay the item price plus the seller's shipping. Artists pay ${artistPlanPrice}/month. Every dollar is clear so makers can focus on creating.`,
     feeAmount: "Stripe",
     feeLabel: "secure processing · fast payouts",
   },
@@ -139,13 +143,16 @@ export default async function Home() {
     // No weekly draw has run yet — fall back to the original "newest first"
     // query so the homepage never looks empty pre-launch.
     featuredProducts = await prisma.product.findMany({
-      where: { inventoryCount: { gt: 0 } },
+      where: { inventoryCount: { gt: 0 }, ...publiclyListedProductWhere() },
       orderBy: { createdAt: "desc" },
       take: 6,
       include: {
         photos: { orderBy: { position: "asc" }, take: 1 },
         sellerProfile: {
-          include: { user: { select: { firstName: true, lastName: true, email: true } } },
+          include: {
+            user: { select: { firstName: true, lastName: true, email: true } },
+            subscription: { select: { status: true, delinquentSince: true } },
+          },
         },
       },
     });

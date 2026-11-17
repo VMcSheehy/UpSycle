@@ -1,8 +1,9 @@
 import { Role } from "@prisma/client";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getCognitoErrorMessage, signUp } from "@/lib/cognito";
+import { deleteUnconfirmedUser, getCognitoErrorMessage, signUp } from "@/lib/cognito";
 import { prisma } from "@/lib/prisma";
+import { SUPPORT_EMAIL } from "@/lib/support-email";
 
 export const dynamic = "force-dynamic";
 
@@ -101,10 +102,12 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     console.error("Failed to persist buyer profile after Cognito signup", err);
+    const rolledBack = await deleteUnconfirmedUser(email);
     return NextResponse.json(
       {
-        error:
-          "Your account was created but we couldn't save your profile. Please contact support before signing in.",
+        error: rolledBack
+          ? "We couldn't finish creating your account. Please try signing up again."
+          : `Your account was created but we couldn't save your profile. Please contact ${SUPPORT_EMAIL} before signing in.`,
       },
       { status: 500 },
     );

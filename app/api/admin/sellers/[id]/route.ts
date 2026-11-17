@@ -12,10 +12,16 @@ import { Prisma, SellerApprovalStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdminApiUser } from "@/lib/auth";
 
-type SellerAction = "approve" | "suspend" | "reinstate";
+type SellerAction = "approve" | "suspend" | "reinstate" | "grant-founding" | "revoke-founding";
 
 function isSellerAction(value: unknown): value is SellerAction {
-  return value === "approve" || value === "suspend" || value === "reinstate";
+  return (
+    value === "approve" ||
+    value === "suspend" ||
+    value === "reinstate" ||
+    value === "grant-founding" ||
+    value === "revoke-founding"
+  );
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -40,6 +46,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const action = body.action;
 
   try {
+    if (action === "grant-founding" || action === "revoke-founding") {
+      const updated = await prisma.sellerProfile.update({
+        where: { id },
+        data: { foundingOffer: action === "grant-founding" },
+      });
+      return NextResponse.json({ id: updated.id, foundingOffer: updated.foundingOffer });
+    }
+
     const sellerProfile = await prisma.sellerProfile.findUniqueOrThrow({ where: { id } });
     const current = sellerProfile.approvalStatus;
 
