@@ -26,6 +26,7 @@ interface OrderItemWithProduct {
   fulfillmentMethod: FulfillmentMethod;
   trackingNumber: string | null;
   trackingUrl: string | null;
+  shipment: { mode: string; easypostShipmentId: string | null; easypostRateId: string | null; labelUrl: string | null } | null;
   createdAt: Date;
   product: { title: string; photos: { url: string }[] };
 }
@@ -43,6 +44,15 @@ function toSaleItemView(item: OrderItemWithProduct): SaleItemView {
     fulfillmentMethod: item.fulfillmentMethod,
     trackingNumber: item.trackingNumber,
     trackingUrl: item.trackingUrl,
+    canBuyLabel: Boolean(
+      item.fulfillmentMethod === "SHIP" &&
+        item.shippingStatus === "PENDING_SHIPMENT" &&
+        item.shipment?.mode === "calculated" &&
+        item.shipment.easypostShipmentId &&
+        item.shipment.easypostRateId &&
+        !item.shipment.labelUrl,
+    ),
+    labelUrl: item.shipment?.labelUrl ?? null,
     orderedAt: item.createdAt.toISOString(),
   };
 }
@@ -69,6 +79,7 @@ export default async function SellerSalesPage() {
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
   const productInclude = {
+    shipment: true,
     product: {
       select: {
         title: true,

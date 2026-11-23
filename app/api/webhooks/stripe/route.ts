@@ -24,6 +24,7 @@ import { PAID_SLOT_COUNT, placementSlotPriceCents } from "@/lib/placement";
 import { parseStoredCartLines } from "@/lib/stored-cart";
 import { paymentIntentIdFromSession, refundStripePayment } from "@/lib/stripe-refund";
 import { checkoutEventShouldFulfill } from "@/lib/stripe-events";
+import { attachOrderShipments } from "@/lib/order-shipments";
 import { sendOrderEmail } from "@/lib/order-email";
 import { logError } from "@/lib/log";
 import {
@@ -187,11 +188,13 @@ async function handleCartCheckout(
       return NextResponse.json({ received: true, ignored: "unpaid" });
     }
     if (result.outcome === "duplicate") {
+      if (result.orderId) await attachOrderShipments(result.orderId, pending.shipmentsJson);
       return NextResponse.json({ received: true, orderId: result.orderId });
     }
     if (result.outcome === "refunded") {
       return NextResponse.json({ received: true, refunded: true, reason: result.reason });
     }
+    await attachOrderShipments(result.orderId, pending.shipmentsJson);
     await notifyOrderPlaced(result.orderId, result.refundedCents);
     return NextResponse.json({ received: true, orderId: result.orderId, refundedCents: result.refundedCents });
   } catch (err) {

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { uploadViaPresignedPost } from "@/lib/browser-upload";
 
 import { centsToDollarsInput, dollarsToCents } from "@/lib/format";
+import { PACKAGE_PRESETS } from "@/lib/shipping";
 import {
   MAX_PRODUCT_PHOTOS,
   MIN_PRODUCT_PHOTOS,
@@ -28,6 +29,12 @@ export interface ExistingProduct {
   offersLocalPickup: boolean;
   dimensions: string | null;
   weightGrams: number | null;
+  packagePreset?: string | null;
+  parcelLengthTenths?: number | null;
+  parcelWidthTenths?: number | null;
+  parcelHeightTenths?: number | null;
+  parcelWeightTenths?: number | null;
+  needsFreightQuote?: boolean;
   inventoryCount: number;
   categoryId: string;
   proofOfHandcraftedUrl: string;
@@ -94,6 +101,20 @@ export default function ProductForm({ categories, product }: ProductFormProps) {
     product ? centsToDollarsInput(product.shippingCostCents) : "",
   );
   const [offersLocalPickup, setOffersLocalPickup] = useState(product?.offersLocalPickup ?? false);
+  const [packagePreset, setPackagePreset] = useState(product?.packagePreset ?? "");
+  const [lengthIn, setLengthIn] = useState(
+    product?.parcelLengthTenths != null ? String(product.parcelLengthTenths / 10) : "",
+  );
+  const [widthIn, setWidthIn] = useState(
+    product?.parcelWidthTenths != null ? String(product.parcelWidthTenths / 10) : "",
+  );
+  const [heightIn, setHeightIn] = useState(
+    product?.parcelHeightTenths != null ? String(product.parcelHeightTenths / 10) : "",
+  );
+  const [weightOz, setWeightOz] = useState(
+    product?.parcelWeightTenths != null ? String(product.parcelWeightTenths / 10) : "",
+  );
+  const [needsFreightQuote, setNeedsFreightQuote] = useState(product?.needsFreightQuote ?? false);
   const [dimensions, setDimensions] = useState(product?.dimensions ?? "");
   const [weightGrams, setWeightGrams] = useState(
     product?.weightGrams != null ? String(product.weightGrams) : "",
@@ -201,6 +222,12 @@ export default function ProductForm({ categories, product }: ProductFormProps) {
       priceCents: dollarsToCents(priceDollars || "0"),
       shippingCostCents: dollarsToCents(shippingDollars || "0"),
       offersLocalPickup,
+      needsFreightQuote,
+      packagePreset: packagePreset || null,
+      parcelLengthIn: lengthIn.trim() ? Number(lengthIn) : null,
+      parcelWidthIn: widthIn.trim() ? Number(widthIn) : null,
+      parcelHeightIn: heightIn.trim() ? Number(heightIn) : null,
+      parcelWeightOz: weightOz.trim() ? Number(weightOz) : null,
       dimensions: dimensions.trim() || undefined,
       weightGrams: weightGrams.trim() ? Number.parseInt(weightGrams, 10) : undefined,
       inventoryCount: Number.parseInt(inventoryCount || "0", 10),
@@ -337,7 +364,7 @@ export default function ProductForm({ categories, product }: ProductFormProps) {
           </div>
           <div>
             <label className={labelClass} htmlFor="shippingDollars">
-              Shipping Cost (USD) *
+              Flat shipping rate (USD) *
             </label>
             <input
               id="shippingDollars"
@@ -351,6 +378,71 @@ export default function ProductForm({ categories, product }: ProductFormProps) {
               placeholder="8.00"
             />
           </div>
+        </div>
+        <p className="mt-2 text-[0.72rem] font-light text-[var(--muted2)]">
+          Buyers pay this flat rate only when live carrier rates are unavailable.
+        </p>
+        <div className="mt-6" id="package-fields">
+          <label className={labelClass} htmlFor="packagePreset">
+            Package
+          </label>
+          <select
+            id="packagePreset"
+            className={inputClass}
+            value={packagePreset}
+            onChange={(event) => {
+              const id = event.target.value;
+              setPackagePreset(id);
+              const preset = PACKAGE_PRESETS.find((item) => item.id === id);
+              if (!preset) return;
+              setLengthIn(String(preset.parcel.lengthIn));
+              setWidthIn(String(preset.parcel.widthIn));
+              setHeightIn(String(preset.parcel.heightIn));
+              setWeightOz(String(preset.parcel.weightOz));
+            }}
+          >
+            <option value="">Custom package</option>
+            {PACKAGE_PRESETS.map((preset) => (
+              <option key={preset.id} value={preset.id}>
+                {preset.label} — {preset.hint}
+              </option>
+            ))}
+          </select>
+          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {[
+              ["parcelLength", "Length (in)", lengthIn, setLengthIn],
+              ["parcelWidth", "Width (in)", widthIn, setWidthIn],
+              ["parcelHeight", "Height (in)", heightIn, setHeightIn],
+              ["parcelWeight", "Weight (oz)", weightOz, setWeightOz],
+            ].map(([id, label, value, setter]) => (
+              <div key={String(id)}>
+                <label className={labelClass} htmlFor={String(id)}>
+                  {label as string}
+                </label>
+                <input
+                  id={String(id)}
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  className={inputClass}
+                  value={value as string}
+                  onChange={(event) => (setter as (next: string) => void)(event.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[0.72rem] font-light text-[var(--muted2)]">
+            Pick a preset or type the box size. You can change the numbers after choosing a preset.
+          </p>
+          <label className="mt-4 flex items-center gap-3 text-[0.85rem] text-[var(--cream)]">
+            <input
+              id="needsFreightQuote"
+              type="checkbox"
+              checked={needsFreightQuote}
+              onChange={(event) => setNeedsFreightQuote(event.target.checked)}
+            />
+            Oversized / needs freight quote
+          </label>
         </div>
         <div className="mt-4">
           <label className="flex items-center gap-3 text-[0.85rem] text-[var(--cream)]">

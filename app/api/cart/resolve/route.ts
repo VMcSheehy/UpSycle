@@ -12,6 +12,8 @@ import { prisma } from "@/lib/prisma";
 import { sellerDisplayName } from "@/lib/format";
 import { listingSubscriptionSelect, sellerListingsArePublic } from "@/lib/public-catalog";
 import { MAX_QUANTITY_PER_LINE, type CartItem } from "@/lib/cart";
+import { shipFromReady, tenthsToInches } from "@/lib/shipping";
+import { getTrackingProvider } from "@/lib/tracking-provider";
 
 interface ResolveBody {
   items?: CartItem[];
@@ -63,11 +65,27 @@ export async function POST(request: NextRequest) {
     // warnings. It is NOT silently reduced here; app/api/checkout/route.ts
     // is the actual enforcement point.
     const location = product.sellerProfile.user.addresses[0];
+    const parcelReady = [product.parcelLengthTenths, product.parcelWidthTenths, product.parcelHeightTenths, product.parcelWeightTenths].every(
+      (value) => tenthsToInches(value) != null && (tenthsToInches(value) ?? 0) > 0,
+    );
+    const live =
+      getTrackingProvider() !== null &&
+      parcelReady &&
+      shipFromReady({
+        line1: product.sellerProfile.shipFromLine1 ?? "",
+        city: product.sellerProfile.shipFromCity ?? "",
+        state: product.sellerProfile.shipFromState ?? "",
+        postalCode: product.sellerProfile.shipFromPostalCode ?? "",
+      }) &&
+      !product.needsFreightQuote;
     return {
       productId: product.id,
       title: product.title,
       photoUrl: product.photos[0]?.url ?? null,
+      sellerProfileId: product.sellerProfileId,
       sellerName: sellerDisplayName(product.sellerProfile),
+      needsFreightQuote: product.needsFreightQuote,
+      shippingMode: product.needsFreightQuote ? "freight" : live ? "live" : "flat",
       priceCents: product.priceCents,
       shippingCostCents: product.shippingCostCents,
       inventoryCount: product.inventoryCount,

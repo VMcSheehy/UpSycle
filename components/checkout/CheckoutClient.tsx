@@ -28,6 +28,26 @@ interface ResolvedLine {
   offersLocalPickup?: boolean;
   pickupCity?: string | null;
   pickupState?: string | null;
+  sellerProfileId?: string;
+  needsFreightQuote?: boolean;
+  shippingMode?: "live" | "flat" | "freight";
+}
+
+interface SellerRateGroup {
+  sellerProfileId: string;
+  sellerName: string;
+  mode: "calculated" | "flat" | "freight";
+  flatCents?: number;
+  insuranceDefault?: boolean;
+  insuranceFeeCents?: number;
+  rates?: Array<{
+    id: string;
+    carrier: string;
+    service: string;
+    speed: "ground" | "express";
+    deliveryDays: number | null;
+    buyerChargeCents: number;
+  }>;
 }
 
 type FulfillmentMethod = "SHIP" | "PICKUP";
@@ -40,6 +60,10 @@ export default function CheckoutClient({ addresses }: { addresses: AddressOption
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fulfillmentByProduct, setFulfillmentByProduct] = useState<Record<string, FulfillmentMethod>>({});
+  const [rateGroups, setRateGroups] = useState<SellerRateGroup[]>([]);
+  const [rateChoice, setRateChoice] = useState<Record<string, string>>({});
+  const [insuredBySeller, setInsuredBySeller] = useState<Record<string, boolean>>({});
+  const [ratesLoading, setRatesLoading] = useState(false);
 
   const fulfillmentFor = (productId: string): FulfillmentMethod => fulfillmentByProduct[productId] ?? "SHIP";
   const effectiveShippingCents = (line: ResolvedLine): number =>
@@ -70,9 +94,69 @@ export default function CheckoutClient({ addresses }: { addresses: AddressOption
     };
   }, [hydrated, items]);
 
+  useEffect(() => {
+    if (!hydrated || !addressId || lines.length === 0) return;
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch starts after the address is known; results land in the callbacks
+    setRatesLoading(true);
+    fetch("/api/shipping/rates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        shippingAddressId: addressId,
+        items: lines.map((line) => ({
+          productId: line.productId,
+          quantity: line.quantity,
+          fulfillmentMethod: fulfillmentFor(line.productId),
+        })),
+      }),
+    })
+      .then((res) => res.json())
+      .then((data: { sellers?: SellerRateGroup[] }) => {
+        if (cancelled) return;
+        const sellers = data.sellers ?? [];
+        setRateGroups(sellers);
+        setRateChoice((current) => {
+          const next = { ...current };
+          for (const seller of sellers) {
+            if (seller.mode === "calculated" && seller.rates?.[0] && !next[seller.sellerProfileId]) {
+              next[seller.sellerProfileId] = seller.rates[0].id;
+            }
+          }
+          return next;
+        });
+        setInsuredBySeller((current) => {
+          const next = { ...current };
+          for (const seller of sellers) {
+            if (next[seller.sellerProfileId] === undefined && seller.insuranceDefault) {
+              next[seller.sellerProfileId] = true;
+            }
+          }
+          return next;
+        });
+      })
+      .finally(() => {
+        if (!cancelled) setRatesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // fulfillmentFor changes with fulfillmentByProduct.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, addressId, lines, fulfillmentByProduct]);
+
   const validLines = lines.filter((l) => l.priceCents != null && l.available !== false);
   const subtotalCents = validLines.reduce((sum, l) => sum + (l.priceCents ?? 0) * l.quantity, 0);
-  const shippingCents = validLines.reduce((sum, l) => sum + effectiveShippingCents(l), 0);
+  const calculatedShipping = rateGroups.some((group) => group.mode === "calculated");
+  const shippingCents = calculatedShipping
+    ? rateGroups.reduce((sum, group) => {
+        if (group.mode === "flat") return sum + (group.flatCents ?? 0);
+        if (group.mode !== "calculated") return sum;
+        const chosen = group.rates?.find((rate) => rate.id === rateChoice[group.sellerProfileId]) ?? group.rates?.[0];
+        const insurance = insuredBySeller[group.sellerProfileId] ? (group.insuranceFeeCents ?? 0) : 0;
+        return sum + (chosen?.buyerChargeCents ?? 0) + insurance;
+      }, 0)
+    : validLines.reduce((sum, line) => sum + effectiveShippingCents(line), 0);
   const totalCents = subtotalCents + shippingCents;
   const distinctSellers = new Set(validLines.map((l) => l.sellerName).filter(Boolean));
   const hasShippingLine = validLines.some(
@@ -84,7 +168,10 @@ export default function CheckoutClient({ addresses }: { addresses: AddressOption
     !loading &&
     validLines.length === lines.length &&
     lines.length > 0 &&
-    (!hasShippingLine || !!addressId);
+    (!hasShippingLine || !!addressId) &&
+    !ratesLoading &&
+    !rateGroups.some((group) => group.mode === "freight") &&
+    rateGroups.every((group) => group.mode !== "calculated" || Boolean(rateChoice[group.sellerProfileId] || group.rates?.[0]));
 
   async function handlePay() {
     if (hasShippingLine && !addressId) return;
@@ -97,6 +184,13 @@ export default function CheckoutClient({ addresses }: { addresses: AddressOption
         body: JSON.stringify({
           items: items.map((i) => ({ ...i, fulfillmentMethod: fulfillmentFor(i.productId) })),
           shippingAddressId: hasShippingLine ? addressId : undefined,
+          shipments: rateGroups
+            .filter((group) => group.mode === "calculated")
+            .map((group) => ({
+              sellerProfileId: group.sellerProfileId,
+              rateId: rateChoice[group.sellerProfileId] ?? group.rates?.[0]?.id,
+              insured: Boolean(insuredBySeller[group.sellerProfileId]),
+            })),
         }),
       });
       const data = await res.json();
@@ -184,6 +278,67 @@ export default function CheckoutClient({ addresses }: { addresses: AddressOption
             All items in this order are set for local pickup — no shipping address needed.
           </p>
         )}
+
+        {ratesLoading ? <p className="mb-8 text-[0.85rem] text-[var(--muted2)]">Finding shipping rates…</p> : null}
+        {rateGroups.some((group) => group.mode === "calculated" || group.mode === "freight") ? (
+          <div className="mb-10" id="shipping-rates">
+            <h2 className="mb-4 font-serif text-[1.2rem] text-[var(--cream)]">Shipping speed</h2>
+            {rateGroups.map((group) => (
+              <div key={group.sellerProfileId} className="mb-6 border border-[var(--border)] p-4">
+                <div className="mb-3 text-[0.75rem] uppercase tracking-[0.12em] text-[var(--muted)]">
+                  From {group.sellerName}
+                </div>
+                {group.mode === "freight" ? (
+                  <p className="text-[0.85rem] text-[var(--muted2)]">
+                    An item from this seller needs a freight quote and cannot be checked out here.
+                  </p>
+                ) : null}
+                {group.mode === "flat" ? (
+                  <p className="text-[0.85rem] text-[var(--cream)]">
+                    Seller flat rate {formatPriceCents(group.flatCents ?? 0)}
+                  </p>
+                ) : null}
+                {group.mode === "calculated"
+                  ? group.rates?.map((rate) => (
+                      <label key={rate.id} className="mb-2 flex cursor-pointer items-start gap-3 text-[0.85rem]">
+                        <input
+                          type="radio"
+                          name={`rate-${group.sellerProfileId}`}
+                          className="mt-1"
+                          checked={(rateChoice[group.sellerProfileId] ?? group.rates?.[0]?.id) === rate.id}
+                          onChange={() => setRateChoice((current) => ({ ...current, [group.sellerProfileId]: rate.id }))}
+                        />
+                        <span>
+                          <span className="text-[var(--cream)]">
+                            {rate.carrier} {rate.service}
+                          </span>
+                          <span className="ml-2 text-[0.65rem] uppercase tracking-[0.12em] text-[var(--muted)]">
+                            {rate.speed === "express" ? "Express" : "Ground"}
+                          </span>
+                          <span className="mt-1 block text-[var(--muted2)]">
+                            {formatPriceCents(rate.buyerChargeCents)}
+                            {rate.deliveryDays ? ` · about ${rate.deliveryDays} day${rate.deliveryDays === 1 ? "" : "s"}` : ""}
+                          </span>
+                        </span>
+                      </label>
+                    ))
+                  : null}
+                {group.mode === "calculated" && (group.insuranceFeeCents ?? 0) > 0 ? (
+                  <label className="mt-3 flex items-center gap-3 text-[0.85rem] text-[var(--cream)]">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(insuredBySeller[group.sellerProfileId])}
+                      onChange={(event) =>
+                        setInsuredBySeller((current) => ({ ...current, [group.sellerProfileId]: event.target.checked }))
+                      }
+                    />
+                    Add shipping insurance ({formatPriceCents(group.insuranceFeeCents ?? 0)})
+                  </label>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         <h2 className="mb-4 font-serif text-[1.2rem] text-[var(--cream)]">Items</h2>
         <div className="divide-y divide-[var(--border)] border-y border-[var(--border)]">

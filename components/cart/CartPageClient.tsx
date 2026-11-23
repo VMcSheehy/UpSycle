@@ -14,6 +14,7 @@ interface ResolvedLine {
   sellerName?: string;
   priceCents?: number;
   shippingCostCents?: number;
+  shippingMode?: "live" | "flat" | "freight";
   inventoryCount?: number;
   available?: boolean;
 }
@@ -74,7 +75,11 @@ export default function CartPageClient() {
 
   const validLines = lines.filter((l) => l.priceCents != null);
   const subtotalCents = validLines.reduce((sum, l) => sum + (l.priceCents ?? 0) * l.quantity, 0);
-  const shippingCents = validLines.reduce((sum, l) => sum + (l.shippingCostCents ?? 0), 0);
+  const liveShipping = validLines.some((line) => line.shippingMode === "live");
+  const shippingCents = validLines.reduce(
+    (sum, line) => sum + (line.shippingMode === "live" ? 0 : (line.shippingCostCents ?? 0)),
+    0,
+  );
   const totalCents = subtotalCents + shippingCents;
   const hasUnavailable = lines.some((l) => !l.priceCents || l.available === false);
 
@@ -160,7 +165,13 @@ export default function CartPageClient() {
           </div>
           <div className="flex justify-between">
             <dt className="text-[var(--muted)]">Shipping</dt>
-            <dd className="text-[var(--cream)]">{formatPriceCents(shippingCents)}</dd>
+            <dd className="text-[var(--cream)]">
+              {liveShipping
+                ? shippingCents > 0
+                  ? `Calculated at checkout + ${formatPriceCents(shippingCents)}`
+                  : "Calculated at checkout"
+                : formatPriceCents(shippingCents)}
+            </dd>
           </div>
           <div className="flex justify-between border-t border-[var(--border)] pt-2 font-semibold">
             <dt className="text-[var(--cream)]">Total</dt>

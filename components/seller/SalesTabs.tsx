@@ -18,6 +18,8 @@ export interface SaleItemView {
   fulfillmentMethod: FulfillmentMethod;
   trackingUrl: string | null;
   trackingNumber: string | null;
+  canBuyLabel?: boolean;
+  labelUrl?: string | null;
   orderedAt: string; // ISO string — Dates aren't passed across the server/client boundary
 }
 
@@ -60,6 +62,37 @@ export default function SalesTabs({
   const [errorFor, setErrorFor] = useState<Record<string, string>>({});
   const [trackingDraft, setTrackingDraft] = useState<Record<string, { carrier: string; number: string }>>({});
   const [, startTransition] = useTransition();
+
+  async function buyLabel(itemId: string, existingUrl?: string | null) {
+    if (existingUrl) {
+      window.open(existingUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setInFlightIds((prev) => new Set(prev).add(itemId));
+    setErrorFor((prev) => {
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
+    try {
+      const res = await fetch(`/api/seller/order-items/${itemId}/label`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error ?? "Could not buy the label.");
+      if (data.labelUrl) window.open(data.labelUrl, "_blank", "noopener,noreferrer");
+      startTransition(() => router.refresh());
+    } catch (err) {
+      setErrorFor((prev) => ({
+        ...prev,
+        [itemId]: err instanceof Error ? err.message : "Could not buy the label.",
+      }));
+    } finally {
+      setInFlightIds((prev) => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
+    }
+  }
 
   async function addTracking(itemId: string) {
     const draft = trackingDraft[itemId] ?? { carrier: "USPS", number: "" };
@@ -255,6 +288,16 @@ export default function SalesTabs({
                 <div className="flex w-52 shrink-0 flex-col items-end gap-2">
                   {item.shippingStatus === "PENDING_SHIPMENT" ? (
                     <>
+                      {item.canBuyLabel || item.labelUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => buyLabel(item.id, item.labelUrl)}
+                          disabled={inFlightIds.has(item.id)}
+                          className="btn-primary px-4 py-2 text-[0.62rem] disabled:opacity-50"
+                        >
+                          {item.labelUrl ? "Print label" : "Buy & print label"}
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => updateStatus(item.id, "SHIPPED")}

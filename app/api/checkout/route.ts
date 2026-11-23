@@ -32,14 +32,18 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/current-user";
 import { getStripeClient } from "@/lib/stripe";
 import { getSiteUrl } from "@/lib/site-url";
+import { sellerDisplayName } from "@/lib/format";
 import { listingSubscriptionSelect, sellerListingsArePublic } from "@/lib/public-catalog";
+import { applyCheckoutShipping, parseShippingMarkup, stripeShippingLines } from "@/lib/shipping";
 import { orderTotalCents, type StoredCartLine } from "@/lib/stored-cart";
+import { getTrackingProvider } from "@/lib/tracking-provider";
 import { MAX_CART_LINES, MAX_QUANTITY_PER_LINE, type CheckoutCartItem } from "@/lib/cart";
 import { randomIntegrationSuffix } from "@/lib/seller-billing";
 
 interface CheckoutBody {
   items?: CheckoutCartItem[];
   shippingAddressId?: string;
+  shipments?: Array<{ sellerProfileId?: string; rateId?: string; insured?: boolean }>;
 }
 
 export async function POST(request: NextRequest) {
@@ -91,7 +95,16 @@ export async function POST(request: NextRequest) {
     where: { id: { in: productIds } },
     include: {
       sellerProfile: {
-        select: { approvalStatus: true, subscription: { select: listingSubscriptionSelect } },
+        select: {
+          id: true,
+          approvalStatus: true,
+          shipFromLine1: true,
+          shipFromCity: true,
+          shipFromState: true,
+          shipFromPostalCode: true,
+          subscription: { select: listingSubscriptionSelect },
+          user: { select: { firstName: true, lastName: true, email: true } },
+        },
       },
     },
   });
@@ -135,11 +148,56 @@ export async function POST(request: NextRequest) {
       productId: product.id,
       quantity,
       unitPriceCents: product.priceCents,
-      shippingCostCents: requestedFulfillment === "PICKUP" ? 0 : product.shippingCostCents,
+      shippingCostCents: 0,
       sellerProfileId: product.sellerProfileId,
       title: product.title,
       fulfillmentMethod: requestedFulfillment,
     });
+  }
+
+  const sellerIds = [...new Set(validatedLines.map((line) => line.sellerProfileId))];
+  const quoteRows = await prisma.shippingQuote.findMany({
+    where: { buyerId: user.id, sellerProfileId: { in: sellerIds }, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: "desc" },
+  });
+  const quotes = sellerIds.flatMap((sellerProfileId) => {
+    const row = quoteRows.find((quote) => quote.sellerProfileId === sellerProfileId);
+    if (!row || !Array.isArray(row.ratesJson)) return [];
+    const rates = row.ratesJson.flatMap((rate) => {
+      if (!rate || typeof rate !== "object") return [];
+      const entry = rate as { id?: string; carrier?: string; service?: string; labelCostCents?: number; deliveryDays?: number | null };
+      if (!entry.id || !entry.carrier || !entry.service || !Number.isInteger(entry.labelCostCents)) return [];
+      return [{ id: entry.id, carrier: entry.carrier, service: entry.service, labelCostCents: entry.labelCostCents as number, deliveryDays: entry.deliveryDays ?? null }];
+    });
+    return [{ sellerProfileId, easypostShipmentId: row.easypostShipmentId, rates }];
+  });
+
+  const priced = applyCheckoutShipping({
+    liveRatesEnabled: getTrackingProvider() !== null,
+    markup: parseShippingMarkup(process.env.SHIPPING_MARKUP),
+    selections: (body.shipments ?? []).flatMap((selection) =>
+      selection.sellerProfileId ? [{ sellerProfileId: selection.sellerProfileId, rateId: selection.rateId, insured: selection.insured }] : [],
+    ),
+    quotes,
+    lines: validatedLines.map((line) => {
+      const product = byId.get(line.productId)!;
+      return {
+        productId: line.productId,
+        sellerProfileId: line.sellerProfileId,
+        sellerName: sellerDisplayName(product.sellerProfile),
+        quantity: line.quantity,
+        unitPriceCents: line.unitPriceCents,
+        flatShippingCents: line.fulfillmentMethod === "PICKUP" ? 0 : product.shippingCostCents,
+        fulfillment: line.fulfillmentMethod,
+        needsFreightQuote: product.needsFreightQuote,
+      };
+    }),
+  });
+  if (!priced.ok) {
+    return NextResponse.json({ error: priced.error }, { status: 409 });
+  }
+  for (const line of validatedLines) {
+    line.shippingCostCents = priced.shippingByProduct[line.productId] ?? 0;
   }
 
   const needsAddress = validatedLines.some((l) => l.fulfillmentMethod === "SHIP");
@@ -174,6 +232,7 @@ export async function POST(request: NextRequest) {
       shippingAddressId: address?.id ?? null,
       totalAmountCents,
       linesJson: validatedLines as unknown as Prisma.InputJsonValue,
+      shipmentsJson: priced.shipments as unknown as Prisma.InputJsonValue,
     },
   });
 
@@ -196,16 +255,16 @@ export async function POST(request: NextRequest) {
       },
       quantity: line.quantity,
     });
-    if (line.shippingCostCents > 0) {
-      lineItems.push({
-        price_data: {
-          currency: "usd",
-          unit_amount: line.shippingCostCents,
-          product_data: { name: `Shipping — ${line.title}` },
-        },
-        quantity: 1,
-      });
-    }
+  }
+  for (const shippingLine of stripeShippingLines(priced.shipments)) {
+    lineItems.push({
+      price_data: {
+        currency: "usd",
+        unit_amount: shippingLine.amountCents,
+        product_data: { name: shippingLine.name },
+      },
+      quantity: 1,
+    });
   }
 
   // Only the pending-checkout id goes in metadata. The cart itself is the

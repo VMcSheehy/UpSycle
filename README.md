@@ -62,3 +62,27 @@ Before going live, also subscribe to `charge.dispute.created`, `charge.refunded`
 Stripe Tax is on for the account, and there are no tax registrations yet. Checkout does not turn on `automatic_tax`, because Stripe would collect no tax and would not report an error. Products use tax code `txcd_20030000` (General - Services), and prices are tax-exclusive, so tax can be turned on after a registration is collecting. Confirm that code with a tax advisor. The catalog is at https://docs.stripe.com/tax/tax-codes. Recurring tax setup is at https://docs.stripe.com/billing/taxes/collect-taxes.
 
 Add-on prices are not billed in this release. Later add-ons should use lookup keys `upsycle_addon_<name>_t1`, `_t2`, and `_t3` so each tier can have its own price.
+
+## Calculated shipping
+
+The buyer pays shipping. Sellers do not. EasyPost is the default carrier account, behind the same provider used for tracking, so Shippo can be added later without rewriting checkout.
+
+On each listing the seller picks a package preset (jewelry, photograph, framed art, glass, woodworking) or types length, width, height, and weight. They can change the numbers after picking a preset. A flat shipping rate stays on the listing for when live rates are off. "Oversized / needs freight quote" removes the item from checkout and shows a request form. That request is saved and emailed to the seller.
+
+The seller saves a ship-from address once under shop settings. Buyers do not see the street.
+
+At checkout, after the address is chosen, the app asks EasyPost for rates, one shipment per seller. The cheapest rate is selected. Ground and express are labeled. Shipping insurance is offered at EasyPost's published cost ($0.50 per $100, minimum $0.50) and is on by default when the seller's items in that shipment are at least `INSURANCE_THRESHOLD_CENTS` (default $500).
+
+`SHIPPING_MARKUP` is `0`, a percent such as `10%`, or a flat amount in cents such as `150` for $1.50. It is added to the rate the buyer sees. Each shipment stores the label cost, the buyer charge, and the margin.
+
+On the seller's sales page, **Buy & print label** purchases the rate the buyer chose and opens the PDF. The tracking number is saved and the buyer gets the shipped email.
+
+A test EasyPost key (`EZTEST...` or the test key from the EasyPost dashboard) uses the same API. No key means calculated rates are hidden and checkout charges the listing's flat rate. The tracking webhook is unchanged: `https://<your-site>/api/webhooks/tracking` with `EASYPOST_WEBHOOK_SECRET`.
+
+Set these in `.env` and on the running app. Do not commit them.
+
+- `EASYPOST_API_KEY`
+- `EASYPOST_WEBHOOK_SECRET`
+- `SHIPPING_MARKUP` optional, default `0`
+- `INSURANCE_THRESHOLD_CENTS` optional, default `50000`
+- `SES_FROM_EMAIL` so quote requests and shipped mail can send

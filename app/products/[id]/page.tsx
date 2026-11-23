@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import AddToCartButton from "@/components/AddToCartButton";
+import FreightQuoteForm from "@/components/product/FreightQuoteForm";
 import ProductGallery from "@/components/ProductGallery";
 import ProductQA from "@/components/ProductQA";
 import { getCurrentUser } from "@/lib/current-user";
@@ -116,7 +117,13 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
 
             <dl className="mb-8 grid grid-cols-2 gap-y-3 border-t border-[var(--border)] pt-6 text-[0.85rem]">
               <dt className="text-[var(--muted)]">Shipping</dt>
-              <dd className="text-[var(--cream)]">{formatPriceCents(product.shippingCostCents)}</dd>
+              <dd className="text-[var(--cream)]">
+                {product.needsFreightQuote
+                  ? "Quoted on request"
+                  : product.parcelLengthTenths
+                    ? "Calculated at checkout"
+                    : formatPriceCents(product.shippingCostCents)}
+              </dd>
               {location && (
                 <>
                   <dt className="text-[var(--muted)]">Location</dt>
@@ -145,7 +152,11 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
               )}
             </dl>
 
-            <AddToCartButton productId={product.id} inventoryCount={product.inventoryCount} />
+            {product.needsFreightQuote ? (
+              <FreightQuoteForm productId={product.id} />
+            ) : (
+              <AddToCartButton productId={product.id} inventoryCount={product.inventoryCount} />
+            )}
           </div>
         </div>
 
