@@ -20,8 +20,12 @@ interface OrderItemWithProduct {
   id: string;
   quantity: number;
   unitPriceCents: number;
+  shippingCostCents: number;
+  refundedAmountCents: number;
   shippingStatus: ShippingStatus;
   fulfillmentMethod: FulfillmentMethod;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
   createdAt: Date;
   product: { title: string; photos: { url: string }[] };
 }
@@ -33,8 +37,12 @@ function toSaleItemView(item: OrderItemWithProduct): SaleItemView {
     thumbnailUrl: item.product.photos[0]?.url ?? null,
     quantity: item.quantity,
     unitPriceCents: item.unitPriceCents,
+    shippingCostCents: item.shippingCostCents,
+    refundedAmountCents: item.refundedAmountCents,
     shippingStatus: item.shippingStatus,
     fulfillmentMethod: item.fulfillmentMethod,
+    trackingNumber: item.trackingNumber,
+    trackingUrl: item.trackingUrl,
     orderedAt: item.createdAt.toISOString(),
   };
 }
@@ -76,7 +84,7 @@ export default async function SellerSalesPage() {
       orderBy: { createdAt: "asc" },
     }),
     prisma.orderItem.findMany({
-      where: { sellerProfileId, shippingStatus: { in: ["SHIPPED", "DELIVERED", "CANCELLED"] } },
+      where: { sellerProfileId, shippingStatus: { not: "PENDING_SHIPMENT" } },
       include: productInclude,
       orderBy: { createdAt: "desc" },
       take: 50,
@@ -103,7 +111,7 @@ export default async function SellerSalesPage() {
           Your <em>Sales</em>
         </h1>
         <p className="max-w-xl text-[0.95rem] font-light leading-loose text-[var(--muted2)]">
-          Track incoming orders, mark items as shipped, and keep an eye on this month&apos;s revenue.
+          Track incoming orders, mark items shipped or delivered, and cancel a line that has not shipped yet. A cancel refunds that line.
         </p>
       </div>
 

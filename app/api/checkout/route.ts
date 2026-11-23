@@ -21,18 +21,21 @@
 // have onboarded). This keeps a single buyer-facing Order/charge while
 // deferring the harder multi-account money-movement problem instead of
 // silently half-implementing it.
+//
+// Buyers are charged the item price plus the seller's shipping amount.
+// UpSycle does not add a buyer service fee on top of that.
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/current-user";
 import { getStripeClient } from "@/lib/stripe";
-import {
-  encodeCartMetadataItems,
-  MAX_QUANTITY_PER_LINE,
-  type CheckoutCartItem,
-  type ValidatedCartLine,
-} from "@/lib/cart";
+import { getSiteUrl } from "@/lib/site-url";
+import { listingSubscriptionSelect, sellerListingsArePublic } from "@/lib/public-catalog";
+import { orderTotalCents, type StoredCartLine } from "@/lib/stored-cart";
+import { MAX_CART_LINES, MAX_QUANTITY_PER_LINE, type CheckoutCartItem } from "@/lib/cart";
+import { randomIntegrationSuffix } from "@/lib/seller-billing";
 
 interface CheckoutBody {
   items?: CheckoutCartItem[];
@@ -58,19 +61,48 @@ export async function POST(request: NextRequest) {
   if (items.length === 0) {
     return NextResponse.json({ error: "Your cart is empty." }, { status: 400 });
   }
+  if (items.length > MAX_CART_LINES) {
+    return NextResponse.json(
+      { error: `A cart can hold at most ${MAX_CART_LINES} items.` },
+      { status: 400 },
+    );
+  }
 
-  // Never trust client-submitted prices/quantities: re-fetch every Product
-  // live and recompute everything server-side.
-  const productIds = [...new Set(items.map((i) => i.productId))];
-  const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
+  const merged = new Map<string, CheckoutCartItem>();
+  for (const item of items) {
+    if (!item || typeof item.productId !== "string") continue;
+    const previous = merged.get(item.productId);
+    const quantity = Math.floor(item.quantity) + (previous ? Math.floor(previous.quantity) : 0);
+    merged.set(item.productId, {
+      productId: item.productId,
+      quantity,
+      fulfillmentMethod: item.fulfillmentMethod ?? previous?.fulfillmentMethod,
+    });
+  }
+  if (merged.size > MAX_CART_LINES) {
+    return NextResponse.json(
+      { error: `A cart can hold at most ${MAX_CART_LINES} items.` },
+      { status: 400 },
+    );
+  }
+
+  const productIds = [...merged.keys()];
+  const products = await prisma.product.findMany({
+    where: { id: { in: productIds } },
+    include: {
+      sellerProfile: {
+        select: { approvalStatus: true, subscription: { select: listingSubscriptionSelect } },
+      },
+    },
+  });
   const byId = new Map(products.map((p) => [p.id, p]));
 
-  const validatedLines: ValidatedCartLine[] = [];
-  for (const item of items) {
+  const validatedLines: StoredCartLine[] = [];
+  for (const item of merged.values()) {
     const product = byId.get(item.productId);
     const quantity = Math.floor(item.quantity);
 
-    if (!product) {
+    if (!product || !sellerListingsArePublic(product.sellerProfile)) {
       return NextResponse.json(
         { error: "One of the items in your cart is no longer available. Please review your cart." },
         { status: 409 },
@@ -110,16 +142,12 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // An address is only required if at least one line actually ships — an
-  // all-pickup cart never needs one.
   const needsAddress = validatedLines.some((l) => l.fulfillmentMethod === "SHIP");
   let address: { id: string } | null = null;
   if (needsAddress) {
     if (!shippingAddressId) {
       return NextResponse.json({ error: "Please select a shipping address." }, { status: 400 });
     }
-    // The address must belong to this buyer — never trust a client-supplied
-    // address id blindly.
     address = await prisma.address.findFirst({
       where: { id: shippingAddressId, userId: user.id },
     });
@@ -128,8 +156,28 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const stripe = getStripeClient();
+  let siteUrl: string;
+  try {
+    siteUrl = getSiteUrl();
+  } catch (err) {
+    console.error("Checkout refused because SITE_URL is not configured", err);
+    return NextResponse.json(
+      { error: "Payments are temporarily unavailable. Please try again shortly." },
+      { status: 503 },
+    );
+  }
 
+  const totalAmountCents = orderTotalCents(validatedLines);
+  const pending = await prisma.pendingCheckout.create({
+    data: {
+      buyerId: user.id,
+      shippingAddressId: address?.id ?? null,
+      totalAmountCents,
+      linesJson: validatedLines as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  const stripe = getStripeClient();
   const lineItems: Array<{
     price_data: {
       currency: string;
@@ -148,12 +196,6 @@ export async function POST(request: NextRequest) {
       },
       quantity: line.quantity,
     });
-    // Flat shipping cost per listing (not multiplied by quantity) — a
-    // per-order shipping-consolidation model is out of scope for this MVP
-    // pass; each listing's shippingCostCents is charged once per line. This
-    // guard also doubles as the pickup/ship branch: a PICKUP line always has
-    // shippingCostCents === 0 (set above), so it naturally gets no shipping
-    // line item.
     if (line.shippingCostCents > 0) {
       lineItems.push({
         price_data: {
@@ -166,23 +208,20 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const metadata = {
-    buyerId: user.id,
-    ...(address ? { shippingAddressId: address.id } : {}),
-    items: encodeCartMetadataItems(validatedLines),
-  };
-
-  const origin = request.headers.get("origin") ?? request.nextUrl.origin;
+  // Only the pending-checkout id goes in metadata. The cart itself is the
+  // PendingCheckout row, which is not limited to Stripe's 500-character cap.
+  const metadata = { kind: "cart", pendingCheckoutId: pending.id };
 
   try {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
+      integration_identifier: `upsycle_cart_${randomIntegrationSuffix()}`,
       customer_email: user.email,
       line_items: lineItems,
       metadata,
       payment_intent_data: { metadata },
-      success_url: `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/checkout`,
+      success_url: `${siteUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${siteUrl}/checkout`,
     });
 
     if (!session.url) {

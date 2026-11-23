@@ -17,9 +17,12 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma, Role } from "@prisma/client";
+import { publicAuthError } from "@/lib/auth-errors";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/current-user";
 import { deleteUnconfirmedUser, signUp } from "@/lib/cognito";
+import { logError } from "@/lib/log";
+import { AUTH_WINDOW_MS, SIGNUP_LIMIT, rateLimitResponse } from "@/lib/rate-limit";
 import { generateUniqueSellerSlug } from "@/lib/slug";
 import { type SellerSignupInput, validateSellerSignup } from "@/lib/validation/sellerSignup";
 
@@ -30,6 +33,14 @@ function nameOrEmailPrefix(person: { firstName: string | null; lastName: string 
 }
 
 export async function POST(request: NextRequest) {
+  const limited = rateLimitResponse(request, "seller-signup", SIGNUP_LIMIT, AUTH_WINDOW_MS);
+  if (limited) {
+    return NextResponse.json(
+      { errors: ["Too many attempts. Please wait a few minutes and try again."] },
+      { status: 429 },
+    );
+  }
+
   const currentUser = await getCurrentUser();
 
   let body: Partial<SellerSignupInput>;
@@ -108,7 +119,7 @@ async function attachSellerToExistingUser(userId: string, input: SellerSignupInp
           socialMediaUrls: input.socialMediaUrls.filter((u) => u.trim()),
           expectedMonthlySales: input.expectedMonthlySales,
           supplierList: input.supplierList.filter((s) => s.trim()),
-          tier: input.tier,
+          requestedTier: input.tier,
           approvalStatus: "PENDING",
           samplePhotos: {
             create: samplePhotoUrls.map((url) => ({ url })),
@@ -155,12 +166,8 @@ async function createNewSellerAccount(input: SellerSignupInput) {
     const result = await signUp({ email, password: input.password! });
     cognitoSub = result.userSub;
   } catch (err) {
-    console.error("Cognito signUp failed during seller signup:", err);
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      { errors: [`Could not create your account: ${message}`] },
-      { status: 502 },
-    );
+    logError("seller-signup.cognito", err);
+    return NextResponse.json({ errors: [publicAuthError(err, "signup")] }, { status: 502 });
   }
 
   // Step 2: create every Postgres row in one transaction, so a failure
@@ -200,7 +207,7 @@ async function createNewSellerAccount(input: SellerSignupInput) {
           socialMediaUrls: input.socialMediaUrls.filter((u) => u.trim()),
           expectedMonthlySales: input.expectedMonthlySales,
           supplierList: input.supplierList.filter((s) => s.trim()),
-          tier: input.tier,
+          requestedTier: input.tier,
           approvalStatus: "PENDING",
           samplePhotos: {
             create: samplePhotoUrls.map((url) => ({ url })),

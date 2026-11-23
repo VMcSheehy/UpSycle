@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sellerDisplayName } from "@/lib/format";
+import { listingSubscriptionSelect, sellerListingsArePublic } from "@/lib/public-catalog";
 import { MAX_QUANTITY_PER_LINE, type CartItem } from "@/lib/cart";
 
 interface ResolveBody {
@@ -36,6 +37,7 @@ export async function POST(request: NextRequest) {
       photos: { orderBy: { position: "asc" }, take: 1 },
       sellerProfile: {
         include: {
+          subscription: { select: listingSubscriptionSelect },
           user: {
             select: {
               firstName: true,
@@ -70,7 +72,8 @@ export async function POST(request: NextRequest) {
       shippingCostCents: product.shippingCostCents,
       inventoryCount: product.inventoryCount,
       quantity: Math.min(item.quantity, MAX_QUANTITY_PER_LINE),
-      available: product.inventoryCount > 0,
+      available:
+        product.inventoryCount > 0 && sellerListingsArePublic(product.sellerProfile),
       offersLocalPickup: product.offersLocalPickup,
       pickupCity: location?.city ?? null,
       pickupState: location?.state ?? null,

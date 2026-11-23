@@ -71,6 +71,7 @@ model User {
 
   questionsAsked    ProductQuestion[] @relation("QuestionAsker")
   questionsAnswered ProductQuestion[] @relation("QuestionAnswerer")
+  pendingCheckouts  PendingCheckout[]
 
   @@map("users")
 }
@@ -146,10 +147,12 @@ model TierPlan {
 
 enum SellerSubscriptionStatus {
   ACTIVE
+  TRIALING
   PAST_DUE
   CANCELED
+  UNPAID
   INCOMPLETE
-  COMPED // admin-granted or $0-tier — no real Stripe subscription behind it
+  COMPED // admin-granted or demo — no Stripe subscription, listings stay public
 }
 
 // The real, billing-aware record behind a seller's tier — one per
@@ -158,14 +161,25 @@ enum SellerSubscriptionStatus {
 // transaction as every write (see lib/seller-billing.ts), so the cache can
 // never drift from this source of truth.
 model SellerSubscription {
-  id                   String                   @id @default(uuid())
-  sellerProfileId      String                   @unique
-  tierPlanId           String
-  status               SellerSubscriptionStatus @default(COMPED)
-  stripeCustomerId     String?
-  stripeSubscriptionId String?                  @unique
-  currentPeriodEnd     DateTime?
-  cancelAtPeriodEnd    Boolean                  @default(false)
+  id                     String                   @id @default(uuid())
+  sellerProfileId        String                   @unique
+  tierPlanId             String
+  status                 SellerSubscriptionStatus @default(COMPED)
+  stripeCustomerId       String?                  @unique
+  stripeSubscriptionId   String?                  @unique
+  stripePriceId          String?
+  billingInterval        String?
+  currentPeriodEnd       DateTime?
+  trialEnd               DateTime?
+  cancelAtPeriodEnd      Boolean                  @default(false)
+  // Reporting flag copied from Stripe subscription metadata founding_artist=true.
+  // Not a price lock. Founders switch plans at the current prices, like everyone else.
+  foundingArtist         Boolean                  @default(false)
+  // True once the 9-month 50% coupon is scheduled to start after the free months.
+  foundingCouponScheduled Boolean                 @default(false)
+  // When a past-due, unpaid, or canceled subscription entered that state.
+  // Listings stay up until this plus the grace period.
+  delinquentSince        DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -174,6 +188,38 @@ model SellerSubscription {
   tierPlan      TierPlan      @relation(fields: [tierPlanId], references: [id], onDelete: Restrict)
 
   @@map("seller_subscriptions")
+}
+
+enum FoundingOfferStatus {
+  PENDING
+  CONFIRMED
+  RELEASED
+}
+
+// One row per seller who has been offered a Founding Artist slot. The cap is
+// 50 pending-or-confirmed rows. Released rows (abandoned checkout) free a slot.
+model FoundingOfferClaim {
+  id                      String              @id @default(uuid())
+  sellerProfileId         String              @unique
+  stripeCheckoutSessionId String?             @unique
+  status                  FoundingOfferStatus @default(PENDING)
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  sellerProfile SellerProfile @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("founding_offer_claims")
+}
+
+// Stripe event ids we have already applied. A retried webhook hits this unique
+// id and does not write the seller again.
+model ProcessedStripeEvent {
+  id        String   @id
+  type      String
+  createdAt DateTime @default(now())
+
+  @@map("processed_stripe_events")
 }
 
 enum TierChangeReason {
@@ -224,13 +270,15 @@ model SellerProfile {
   expectedMonthlySales Int? // expected volume of sales per month
   supplierList         String[] // e.g. "Home Depot", "Hobby Lobby"
   approvalStatus       SellerApprovalStatus @default(PENDING)
-  // Denormalized read cache of SellerSubscription.tierPlan.tier — kept in
-  // sync (same transaction) by lib/seller-billing.ts's applyTierChange on
-  // every subscribe/upgrade/downgrade/cancel/admin-override. Exists because
-  // this value is read directly, cheaply, in hot paths (admin table, seller
-  // portal, /browse ordering) that shouldn't each join through
-  // SellerSubscription -> TierPlan. SellerSubscription is the source of
-  // truth; never write this field outside applyTierChange.
+  // Plan the applicant asked for. Not the billed tier. Checkout and webhooks
+  // never read this to decide what to charge.
+  requestedTier        SellerTier?
+  // Admin-only eligibility for the Founding Artist offer. The seller cannot
+  // set this. Checkout also accepts the FOUNDING50 code, capped at 50 sellers.
+  foundingOffer        Boolean              @default(false)
+  // Denormalized read cache of the billed tier. Webhooks are the only writer
+  // after signup (seed data is the other). A seller cannot set this from the
+  // dashboard or the application form.
   tier                 SellerTier           @default(TIER_1)
   // Denormalized copy of TierPlan.searchRankWeight for the seller's current
   // tier — lets /browse's Product query sort with a single 1-level relation
@@ -246,8 +294,9 @@ model SellerProfile {
   samplePhotos  SellerSamplePhoto[]
   products      Product[]
   orderItems    OrderItem[]
-  subscription  SellerSubscription?
-  tierChanges   SellerTierChange[]
+  subscription   SellerSubscription?
+  foundingClaim  FoundingOfferClaim?
+  tierChanges    SellerTierChange[]
   lotteryWins   LotteryWinner[]
   slotPurchases FeaturedSlotPurchase[]
 
@@ -418,8 +467,18 @@ model ProductQuestion {
 enum ShippingStatus {
   PENDING_SHIPMENT
   SHIPPED
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
   DELIVERED
+  EXCEPTION
   CANCELLED
+}
+
+enum ShippingCarrier {
+  USPS
+  UPS
+  FEDEX
+  DHL
 }
 
 // Per-line-item fulfillment choice made by the buyer at checkout (only
@@ -446,7 +505,9 @@ model Order {
   // thing sellers update directly.
   shippingStatus   ShippingStatus @default(PENDING_SHIPMENT)
   totalAmountCents Int
-  stripePaymentId  String? // Stripe Connect payment intent/charge reference
+  // Unique so a retried Stripe webhook cannot insert a second order for the
+  // same charge. Nulls stay allowed (Postgres unique indexes permit them).
+  stripePaymentId  String? @unique
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -456,6 +517,39 @@ model Order {
   items           OrderItem[]
 
   @@map("orders")
+}
+
+enum PendingCheckoutStatus {
+  OPEN
+  FULFILLED
+  REFUNDED
+}
+
+// The buyer's validated cart, saved before Stripe Checkout starts. Session
+// metadata stores only this id. Stripe metadata values are capped at 500
+// characters, which is too small for a full cart and was the previous
+// (truncated) source of truth for the webhook.
+model PendingCheckout {
+  id                  String                @id @default(uuid())
+  buyerId             String
+  shippingAddressId   String?
+  totalAmountCents    Int
+  linesJson           Json
+  status              PendingCheckoutStatus @default(OPEN)
+  stripePaymentId     String?               @unique
+  // Cents that must be refunded for this charge (amount mismatch, or lines
+  // that could not be fulfilled). refundedAmountCents tracks what Stripe
+  // already accepted so a webhook retry finishes the refund without
+  // decrementing stock again.
+  refundDueCents      Int                   @default(0)
+  refundedAmountCents Int                   @default(0)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  buyer User @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  @@index([buyerId])
+  @@map("pending_checkouts")
 }
 
 // Line item — links an Order to a Product (and denormalizes the seller for querying
@@ -474,17 +568,47 @@ model OrderItem {
   fulfillmentMethod FulfillmentMethod @default(SHIP)
 
   // Per-line-item shipment tracking. A single Order can contain items from
-  // multiple sellers, each of whom ships independently — so "mark as
-  // shipped" (issue #13) must act here, not on Order.shippingStatus.
+  // multiple sellers, each of whom ships independently — so ship, deliver,
+  // and cancel act here. Order.shippingStatus is rewritten from these lines.
   shippingStatus ShippingStatus @default(PENDING_SHIPMENT)
+  // Set when a cancel refund is accepted by Stripe. A retry uses the same
+  // idempotency key and then fills this in if the first attempt failed.
+  refundedAmountCents Int     @default(0)
+  stripeRefundId      String?
+
+  // Carrier tracking. The public link works without a tracking account.
+  // providerTrackerId is set only when EasyPost accepts the number.
+  carrier           ShippingCarrier?
+  trackingNumber    String?
+  trackingUrl       String?
+  trackingProvider  String?
+  providerTrackerId String?
 
   createdAt DateTime @default(now())
 
-  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
-  sellerProfile SellerProfile @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+  trackingEvents TrackingEvent[]
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product        Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  sellerProfile  SellerProfile  @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
 
+  @@index([providerTrackerId])
+  @@index([carrier, trackingNumber])
   @@map("order_items")
+}
+
+// One row per provider webhook event. The provider event id is unique so a
+// retry does not move the line or email the buyer again.
+model TrackingEvent {
+  id              String   @id @default(uuid())
+  providerEventId String   @unique
+  orderItemId     String?
+  carrierStatus   String
+  createdAt       DateTime @default(now())
+
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+
+  @@index([orderItemId])
+  @@map("tracking_events")
 }
 
 // ---------------------------------------------------------------------------
@@ -524,6 +648,8 @@ model PlacementPeriod {
   id       String                @id @default(uuid())
   startsAt DateTime // Sunday 00:00 this period goes/went live
   endsAt   DateTime // following Sunday 00:00
+  // At most one PENDING row. A second Saturday draw reuses it. The partial
+  // unique index placement_periods_one_pending enforces that in Postgres.
   status   PlacementPeriodStatus @default(PENDING)
   drawnAt  DateTime              @default(now())
 
@@ -569,7 +695,7 @@ model FeaturedSlotPurchase {
   priceCents        Int
   isRandomFill      Boolean           @default(false) // true = system auto-filled an unsold slot at Sunday finalize, not a real purchase
   featuredProductId String? // cascade-assigned product when isRandomFill and the seller holds other placements this period; null = use their #1 marketingPriority product
-  stripePaymentId   String? // null when isRandomFill
+  stripePaymentId   String?           @unique // null when isRandomFill; unique so a retried webhook cannot insert two slots for one charge
   purchasedAt       DateTime          @default(now())
 
   period        PlacementPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)

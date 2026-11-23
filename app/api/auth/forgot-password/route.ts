@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { forgotPassword, getCognitoErrorMessage } from "@/lib/cognito";
+import { publicAuthError } from "@/lib/auth-errors";
+import { forgotPassword } from "@/lib/cognito";
+import { logError } from "@/lib/log";
+import { AUTH_WINDOW_MS, SIGNUP_LIMIT, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +12,9 @@ interface ForgotPasswordBody {
 }
 
 export async function POST(request: NextRequest) {
+  const limited = rateLimitResponse(request, "forgot-password", SIGNUP_LIMIT, AUTH_WINDOW_MS);
+  if (limited) return limited;
+
   let body: ForgotPasswordBody;
   try {
     body = await request.json();
@@ -23,8 +29,16 @@ export async function POST(request: NextRequest) {
   try {
     await forgotPassword(body.email);
   } catch (err) {
-    return NextResponse.json({ error: getCognitoErrorMessage(err) }, { status: 400 });
+    const message = publicAuthError(err, "reset");
+    if (message.startsWith("Too many attempts")) {
+      return NextResponse.json({ error: message }, { status: 429 });
+    }
+    // Same response whether or not the email is registered.
+    logError("auth.forgot-password", err);
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    ok: true,
+    message: "If an account exists for that email, we sent a reset code.",
+  });
 }

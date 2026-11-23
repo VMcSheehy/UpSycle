@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ errors: ["Request body must be valid JSON."] }, { status: 400 });
   }
 
-  const errors = validateProductInput(body);
+  const errors = validateProductInput(body, { ownerUserId: auth.seller.userId });
   if (errors.length > 0) {
     return NextResponse.json({ errors }, { status: 400 });
   }

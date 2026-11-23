@@ -9,12 +9,10 @@ import { Construct } from "constructs";
  * owns credentials/session security for the app. Postgres (see DataStack /
  * prisma/schema.prisma) stores only `cognitoSub` — no passwords.
  *
- * Role model: Requirement.MD calls for a user to hold multiple roles
- * (buyer/seller/admin) simultaneously. Cognito Groups are used for this
- * (a user can be added to multiple groups: `buyer`, `seller`, `admin`) rather
- * than a single custom attribute, since a scalar attribute can't represent
- * "holds more than one role" cleanly. Groups also give free IAM-less
- * role-based authorization via the ID token's `cognito:groups` claim.
+ * Role model: a person can be a buyer, a seller, and an admin at once.
+ * Those roles are Postgres UserRole rows (lib/auth.ts). Cognito groups are
+ * not created — the app never read them, and a second role system would
+ * drift from the database.
  *
  * A custom `sellerApprovalStatus` attribute is also exposed for quick reads
  * (pending/approved/suspended) without a DB round-trip, mirroring
@@ -55,27 +53,6 @@ export class AuthStack extends cdk.Stack {
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
       email: cognito.UserPoolEmail.withCognito(), // swapped to SES (EmailStack identity) once that identity is verified & sending limits raised
       removalPolicy: cdk.RemovalPolicy.RETAIN,
-    });
-
-    // One group per role. A user can belong to any combination of these,
-    // giving the multi-role support Requirement.MD calls for.
-    new cognito.CfnUserPoolGroup(this, "BuyerGroup", {
-      userPoolId: this.userPool.userPoolId,
-      groupName: "buyer",
-      description: "Buyers — default role for any signed-up user",
-      precedence: 30,
-    });
-    new cognito.CfnUserPoolGroup(this, "SellerGroup", {
-      userPoolId: this.userPool.userPoolId,
-      groupName: "seller",
-      description: "Sellers — granted after seller vetting is approved (see SellerProfile.approvalStatus)",
-      precedence: 20,
-    });
-    new cognito.CfnUserPoolGroup(this, "AdminGroup", {
-      userPoolId: this.userPool.userPoolId,
-      groupName: "admin",
-      description: "Platform admins",
-      precedence: 10,
     });
 
     this.userPoolClient = this.userPool.addClient("NextJsAppClient", {

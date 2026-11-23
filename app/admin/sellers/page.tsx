@@ -63,7 +63,13 @@ export default async function AdminSellersPage() {
       },
       actions: {
         value: "",
-        display: <SellerActionButtons sellerId={seller.id} status={seller.approvalStatus} />,
+        display: (
+          <SellerActionButtons
+            sellerId={seller.id}
+            status={seller.approvalStatus}
+            foundingOffer={seller.foundingOffer}
+          />
+        ),
       },
     },
   }));
@@ -118,8 +124,8 @@ export default async function AdminSellersPage() {
                   <dd>{seller.expectedMonthlySales ?? "—"}</dd>
                 </div>
                 <div className="admin-review-field">
-                  <dt>Seller Tier</dt>
-                  <dd>{sellerTierLabel(seller.tier)}</dd>
+                  <dt>Applied plan</dt>
+                  <dd>{sellerTierLabel(seller.requestedTier ?? seller.tier)}</dd>
                 </div>
                 <div className="admin-review-field">
                   <dt>Social Media</dt>
@@ -166,7 +172,11 @@ export default async function AdminSellersPage() {
                 </>
               )}
 
-              <SellerActionButtons sellerId={seller.id} status={seller.approvalStatus} />
+              <SellerActionButtons
+                sellerId={seller.id}
+                status={seller.approvalStatus}
+                foundingOffer={seller.foundingOffer}
+              />
             </div>
           ))}
         </div>

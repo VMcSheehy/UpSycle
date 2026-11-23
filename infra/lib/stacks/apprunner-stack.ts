@@ -1,5 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import * as apprunner from "aws-cdk-lib/aws-apprunner";
+import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
+import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecrAssets from "aws-cdk-lib/aws-ecr-assets";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
@@ -8,6 +10,8 @@ import { Construct } from "constructs";
 import * as path from "path";
 
 export interface AppRunnerStackProps extends cdk.StackProps {
+  vpc: ec2.IVpc;
+  appRunnerConnectorSecurityGroup: ec2.ISecurityGroup;
   dbSecret: secretsmanager.ISecret;
   userPoolId: string;
   userPoolClientId: string;
@@ -18,6 +22,13 @@ export interface AppRunnerStackProps extends cdk.StackProps {
    * the bucket itself blocks all public access, so uploaded photo URLs must
    * be built from this domain, never the bucket's own S3 URL. */
   productPhotosCdnDomain: string;
+  /** Names of existing Secrets Manager secrets. Values are not in this repo. */
+  stripeSecretKeyName: string;
+  stripeWebhookSecretName: string;
+  /** Fixed public origin for Stripe return URLs. Not taken from request headers. */
+  siteUrl: string;
+  /** SES domain identity, the same value EmailStack registers. */
+  sesIdentityDomain: string;
 }
 
 /**
@@ -47,9 +58,8 @@ export interface AppRunnerStackProps extends cdk.StackProps {
  * Actions workflow that runs `cdk deploy` on push is the natural next step
  * (tracked alongside issue #25).
  *
- * Cost: smallest valid instance size (0.25 vCPU / 0.5 GB) — App Runner has
- * no true scale-to-zero, so unlike Amplify's serverless-first design this
- * carries a modest always-on floor, roughly $12-15/mo at this size.
+ * Instance size is 0.5 vCPU / 1 GB. App Runner pairs 1 GB of memory with at
+ * least 0.5 vCPU. There is no scale-to-zero, so this is a modest always-on cost.
  */
 export class AppRunnerStack extends cdk.Stack {
   public readonly service: apprunner.CfnService;
@@ -82,6 +92,9 @@ export class AppRunnerStack extends cdk.Stack {
     props.dbSecret.grantRead(instanceRole);
     props.productPhotosBucket.grantReadWrite(instanceRole);
     props.sellerVettingPhotosBucket.grantReadWrite(instanceRole);
+    // AdminGetUser + AdminDeleteUser are required to roll back a signup when
+    // Postgres fails after Cognito creates the user. Both are limited to this
+    // user pool, and the app only deletes users whose status is UNCONFIRMED.
     instanceRole.addToPolicy(
       new iam.PolicyStatement({
         actions: [
@@ -91,11 +104,42 @@ export class AppRunnerStack extends cdk.Stack {
           "cognito-idp:InitiateAuth",
           "cognito-idp:ForgotPassword",
           "cognito-idp:ConfirmForgotPassword",
+          "cognito-idp:AdminGetUser",
           "cognito-idp:AdminDeleteUser",
         ],
         resources: [props.userPoolArn],
       })
     );
+    // Order mail. Sending fails closed in the app (the status change is kept)
+    // until the domain identity is verified and SES is out of the sandbox.
+    const sesIdentities = [...new Set([props.sesIdentityDomain, props.sesIdentityDomain.toLowerCase()])];
+    instanceRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["ses:SendEmail"],
+        resources: sesIdentities.map(
+          (domain) => `arn:aws:ses:${this.region}:${this.account}:identity/${domain}`,
+        ),
+      })
+    );
+
+    const stripeSecretKey = secretsmanager.Secret.fromSecretNameV2(
+      this,
+      "StripeSecretKey",
+      props.stripeSecretKeyName,
+    );
+    const stripeWebhookSecret = secretsmanager.Secret.fromSecretNameV2(
+      this,
+      "StripeWebhookSecret",
+      props.stripeWebhookSecretName,
+    );
+    stripeSecretKey.grantRead(instanceRole);
+    stripeWebhookSecret.grantRead(instanceRole);
+
+    const vpcConnector = new apprunner.CfnVpcConnector(this, "VpcConnector", {
+      vpcConnectorName: "upsycle-apprunner",
+      subnets: props.vpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }).subnetIds,
+      securityGroups: [props.appRunnerConnectorSecurityGroup.securityGroupId],
+    });
 
     this.service = new apprunner.CfnService(this, "UpSycleAppRunnerService", {
       serviceName: "upsycle-web",
@@ -116,6 +160,11 @@ export class AppRunnerStack extends cdk.Stack {
               { name: "PHOTOS_BUCKET_NAME", value: props.productPhotosBucket.bucketName },
               { name: "PHOTOS_CDN_DOMAIN", value: props.productPhotosCdnDomain },
               { name: "SELLER_VETTING_BUCKET_NAME", value: props.sellerVettingPhotosBucket.bucketName },
+              { name: "SITE_URL", value: props.siteUrl },
+              // EASYPOST_API_KEY and EASYPOST_WEBHOOK_SECRET are optional.
+              // Set them on the service when Victoria has an EasyPost account.
+              // A missing key keeps carrier tracking links and skips auto-updates.
+              { name: "SES_FROM_EMAIL", value: `support@${props.sesIdentityDomain.toLowerCase()}` },
             ],
             // DATABASE_URL can't be handed over as one composed connection
             // string — Secrets Manager ARN references extract a single JSON
@@ -127,23 +176,26 @@ export class AppRunnerStack extends cdk.Stack {
               { name: "DB_USERNAME", value: `${props.dbSecret.secretArn}:username::` },
               { name: "DB_PASSWORD", value: `${props.dbSecret.secretArn}:password::` },
               { name: "DB_NAME", value: `${props.dbSecret.secretArn}:dbname::` },
+              { name: "STRIPE_SECRET_KEY", value: stripeSecretKey.secretArn },
+              { name: "STRIPE_WEBHOOK_SECRET", value: stripeWebhookSecret.secretArn },
             ],
           },
         },
       },
       instanceConfiguration: {
-        cpu: "0.25 vCPU",
-        memory: "0.5 GB",
+        cpu: "0.5 vCPU",
+        memory: "1 GB",
         instanceRoleArn: instanceRole.roleArn,
       },
+      networkConfiguration: {
+        egressConfiguration: {
+          egressType: "VPC",
+          vpcConnectorArn: vpcConnector.attrVpcConnectorArn,
+        },
+      },
       healthCheckConfiguration: {
-        // TCP (not HTTP): the container demonstrably starts fine (confirmed
-        // via CloudWatch application logs — "✓ Ready in 0ms"), but the HTTP
-        // health check on /signup still failed with no further diagnostic
-        // detail. TCP isolates whether this is a pure port-reachability
-        // issue vs. something HTTP-request-specific; simpler and more
-        // commonly used for App Runner + Next.js besides.
-        protocol: "TCP",
+        protocol: "HTTP",
+        path: "/api/health",
         interval: 10,
         timeout: 5,
         healthyThreshold: 1,
@@ -161,6 +213,25 @@ export class AppRunnerStack extends cdk.Stack {
       // "Project" cost-allocation tag was added to this one resource by hand
       // instead (`aws apprunner tag-resource`), out of band from CDK.
       tags: [{ key: "project", value: "UpSycle" }],
+    });
+
+    const fiveXx = new cloudwatch.Metric({
+      namespace: "AWS/AppRunner",
+      metricName: "5xxStatusResponses",
+      dimensionsMap: {
+        ServiceName: "upsycle-web",
+        ServiceID: this.service.attrServiceId,
+      },
+      statistic: "Sum",
+      period: cdk.Duration.minutes(5),
+    });
+    new cloudwatch.Alarm(this, "AppRunner5xxAlarm", {
+      metric: fiveXx,
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      alarmDescription: "UpSycle App Runner returned one or more 5xx responses in five minutes.",
     });
 
     this.serviceUrl = this.service.attrServiceUrl;

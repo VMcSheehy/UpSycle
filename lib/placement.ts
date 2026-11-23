@@ -4,6 +4,7 @@
 // three page templates can't drift from each other on slot counts/pricing.
 import type { PlacementPageType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { publicSellerWhere, sellerListingsArePublic } from "@/lib/public-catalog";
 
 // Prompts/product_layout.md: 10 lottery winners for every page type (Home,
 // each top-level Category, each leaf Sub-Category).
@@ -46,7 +47,10 @@ export async function getPendingPlacementPeriod() {
 const featuredProductInclude = {
   photos: { orderBy: { position: "asc" as const }, take: 1 },
   sellerProfile: {
-    include: { user: { select: { firstName: true, lastName: true, email: true } } },
+    include: {
+      user: { select: { firstName: true, lastName: true, email: true } },
+      subscription: { select: { status: true, delinquentSince: true } },
+    },
   },
 };
 
@@ -64,10 +68,11 @@ export async function resolveFeaturedProduct(sellerProfileId: string, featuredPr
       where: { id: featuredProductId },
       include: featuredProductInclude,
     });
-    if (pinned) return pinned;
+    if (pinned && sellerListingsArePublic(pinned.sellerProfile)) return pinned;
+    if (pinned) return null;
   }
   return prisma.product.findFirst({
-    where: { sellerProfileId },
+    where: { sellerProfileId, sellerProfile: publicSellerWhere() },
     orderBy: { marketingPriority: "asc" },
     include: featuredProductInclude,
   });

@@ -20,18 +20,32 @@
 // override UI, and the page templates can't drift from each other.
 import {
   PlacementPageType,
-  SellerApprovalStatus,
+  Prisma,
   SellerTier,
-  type Prisma,
+  type Prisma as PrismaTypes,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { publicSellerWhere } from "@/lib/public-catalog";
 import {
   LOTTERY_WINNER_COUNT,
   PAID_SLOT_COUNT,
   getPendingPlacementPeriod,
 } from "@/lib/placement";
 
-type Tx = Prisma.TransactionClient;
+type Tx = PrismaTypes.TransactionClient;
+
+// A second Saturday run must not open another purchase window. Finalize
+// publishes the single pending period. The partial unique index is the
+// backstop when two runs pass this check together.
+export function shouldReusePendingPeriod(existing: { id: string } | null): boolean {
+  return existing !== null;
+}
+
+function isPendingPeriodConflict(err: unknown): boolean {
+  if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") return false;
+  const text = `${err.message} ${JSON.stringify(err.meta ?? {})}`;
+  return text.includes("placement_periods_one_pending") || text.includes("status");
+}
 
 // ---------------------------------------------------------------------------
 // Date helpers
@@ -76,7 +90,7 @@ function pickRandom<T>(pool: readonly T[], count: number): T[] {
 /** HOME eligibility: any APPROVED seller with >=1 Product, any tier. Also used (unfiltered by category) as HOME's paid-slot random-fill pool. */
 async function eligibleHomeSellers(tx: Tx): Promise<string[]> {
   const rows = await tx.sellerProfile.findMany({
-    where: { approvalStatus: SellerApprovalStatus.APPROVED, products: { some: {} } },
+    where: { ...publicSellerWhere(), products: { some: {} } },
     select: { id: true },
   });
   return rows.map((r) => r.id);
@@ -95,7 +109,7 @@ async function eligibleSellersByCategoryIds(
 ): Promise<string[]> {
   const rows = await tx.sellerProfile.findMany({
     where: {
-      approvalStatus: SellerApprovalStatus.APPROVED,
+      ...publicSellerWhere(),
       ...(tier ? { tier } : {}),
       products: { some: { categoryId: { in: categoryIds } } },
     },
@@ -104,7 +118,7 @@ async function eligibleSellersByCategoryIds(
   return rows.map((r) => r.id);
 }
 
-type CategoryWithChildren = Prisma.CategoryGetPayload<{ include: { children: true } }>;
+type CategoryWithChildren = PrismaTypes.CategoryGetPayload<{ include: { children: true } }>;
 
 async function getTopLevelCategoriesWithChildren(tx: Tx): Promise<CategoryWithChildren[]> {
   return tx.category.findMany({
@@ -122,6 +136,21 @@ export async function runLotteryDraw(): Promise<void> {
   const startsAt = nextSundayMidnightUtc(now);
   const endsAt = addDays(startsAt, 7);
 
+  const existing = await prisma.placementPeriod.findFirst({
+    where: { status: "PENDING" },
+    select: { id: true },
+  });
+  if (shouldReusePendingPeriod(existing)) return;
+
+  try {
+    await drawPendingPeriod(now, startsAt, endsAt);
+  } catch (err) {
+    if (isPendingPeriodConflict(err)) return;
+    throw err;
+  }
+}
+
+async function drawPendingPeriod(now: Date, startsAt: Date, endsAt: Date): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const topLevelCategories = await getTopLevelCategoriesWithChildren(tx);
 
@@ -129,7 +158,7 @@ export async function runLotteryDraw(): Promise<void> {
       data: { startsAt, endsAt, status: "PENDING", drawnAt: now },
     });
 
-    const winnerRows: Prisma.LotteryWinnerCreateManyInput[] = [];
+    const winnerRows: PrismaTypes.LotteryWinnerCreateManyInput[] = [];
 
     // HOME: any APPROVED seller with >=1 product, any tier.
     const homePool = await eligibleHomeSellers(tx);
@@ -263,7 +292,7 @@ async function randomFillUnsoldSlots(tx: Tx, periodId: string, target: Placement
   const candidates = pool.filter((id) => !excluded.has(id));
   const fillSellers = pickRandom(candidates, missingSlotNumbers.length);
 
-  const fillRows: Prisma.FeaturedSlotPurchaseCreateManyInput[] = fillSellers.map((sellerProfileId, idx) => ({
+  const fillRows: PrismaTypes.FeaturedSlotPurchaseCreateManyInput[] = fillSellers.map((sellerProfileId, idx) => ({
     periodId,
     pageType: target.pageType,
     categoryId: target.categoryId,

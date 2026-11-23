@@ -19,13 +19,56 @@ export interface ProductInput {
   photoUrls: string[];
 }
 
-function isValidUrl(value: string): boolean {
+function assetHosts(): { cdnHost: string | null; vettingHost: string | null } {
+  const cdn = process.env.PHOTOS_CDN_DOMAIN?.trim().replace(/\/$/, "") || null;
+  const bucket = process.env.SELLER_VETTING_BUCKET_NAME?.trim();
+  const region = (process.env.AWS_REGION || process.env.COGNITO_REGION || "").trim();
+  const vettingHost = bucket && region ? `${bucket}.s3.${region}.amazonaws.com` : null;
+  return { cdnHost: cdn ? cdn.replace(/^https?:\/\//, "") : null, vettingHost };
+}
+
+function hostAndPrefix(value: string, host: string | null, keyPrefix: string): boolean {
+  if (!host) return false;
   try {
     const url = new URL(value.trim());
-    return url.protocol === "http:" || url.protocol === "https:";
+    if (url.protocol !== "https:") return false;
+    if (url.hostname !== host) return false;
+    const path = decodeURIComponent(url.pathname).replace(/^\/+/, "");
+    return path.startsWith(`${keyPrefix}/`);
   } catch {
     return false;
   }
+}
+
+function pathIncludesUser(value: string, userId: string): boolean {
+  try {
+    const path = decodeURIComponent(new URL(value.trim()).pathname);
+    return path.includes(`/${userId}/`);
+  } catch {
+    return false;
+  }
+}
+
+export function isAllowedProductPhotoUrl(value: string, ownerUserId?: string): boolean {
+  const ok = hostAndPrefix(value, assetHosts().cdnHost, "product-photos");
+  if (!ok) return false;
+  if (ownerUserId && !pathIncludesUser(value, ownerUserId)) return false;
+  return true;
+}
+
+export function isAllowedProofUrl(value: string, ownerUserId?: string): boolean {
+  const ok = hostAndPrefix(value, assetHosts().vettingHost, "proof-of-handcrafted");
+  if (!ok) return false;
+  if (ownerUserId && !pathIncludesUser(value, ownerUserId)) return false;
+  return true;
+}
+
+// The browser bundle does not receive the bucket env vars, so the form's
+// instant check stays a shape check. The API always enforces the host list.
+function enforceAssetHosts(): boolean {
+  if (typeof window === "undefined") return true;
+  const hosts = assetHosts();
+  return Boolean(hosts.cdnHost || hosts.vettingHost);
 }
 
 function isNonNegativeInt(value: unknown): value is number {
@@ -36,7 +79,10 @@ function isNonNegativeInt(value: unknown): value is number {
  * Validates a (possibly partial/untrusted) product create payload. Returns a
  * list of human-readable error messages; empty means valid.
  */
-export function validateProductInput(input: Partial<ProductInput>): string[] {
+export function validateProductInput(
+  input: Partial<ProductInput>,
+  options?: { ownerUserId?: string },
+): string[] {
   const errors: string[] = [];
 
   if (!input.title || !input.title.trim()) {
@@ -71,17 +117,18 @@ export function validateProductInput(input: Partial<ProductInput>): string[] {
     errors.push("Category is required.");
   }
 
+  const checkHosts = enforceAssetHosts();
   if (!input.proofOfHandcraftedUrl || !input.proofOfHandcraftedUrl.trim()) {
     errors.push("A proof-of-handcrafted photo is required.");
-  } else if (!isValidUrl(input.proofOfHandcraftedUrl)) {
-    errors.push("The proof-of-handcrafted upload failed. Please re-upload.");
+  } else if (checkHosts && !isAllowedProofUrl(input.proofOfHandcraftedUrl, options?.ownerUserId)) {
+    errors.push("The proof-of-handcrafted file must be uploaded to UpSycle.");
   }
 
   const photoUrls = (input.photoUrls ?? []).filter((u) => u.trim());
   if (photoUrls.length < MIN_PRODUCT_PHOTOS || photoUrls.length > MAX_PRODUCT_PHOTOS) {
     errors.push(`Between ${MIN_PRODUCT_PHOTOS} and ${MAX_PRODUCT_PHOTOS} product photos are required.`);
-  } else if (photoUrls.some((u) => !isValidUrl(u))) {
-    errors.push("One or more product photo uploads failed. Please re-upload.");
+  } else if (checkHosts && photoUrls.some((u) => !isAllowedProductPhotoUrl(u, options?.ownerUserId))) {
+    errors.push("Product photos must be uploaded to UpSycle.");
   }
 
   return errors;

@@ -18,6 +18,8 @@ import {
   MAX_PRODUCT_PHOTOS,
   MIN_PRODUCT_PHOTOS,
   type ProductInput,
+  isAllowedProductPhotoUrl,
+  isAllowedProofUrl,
   validateInventoryAdjustment,
 } from "@/lib/validation/product";
 
@@ -78,7 +80,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const photoUrls = body.photoUrls.map((u) => u.trim()).filter(Boolean);
     if (photoUrls.length < MIN_PRODUCT_PHOTOS || photoUrls.length > MAX_PRODUCT_PHOTOS) {
       errors.push(`Between ${MIN_PRODUCT_PHOTOS} and ${MAX_PRODUCT_PHOTOS} product photos are required.`);
+    } else if (photoUrls.some((url) => !isAllowedProductPhotoUrl(url, auth.seller.userId))) {
+      errors.push("Product photos must be uploaded to UpSycle.");
     }
+  }
+  if (
+    body.proofOfHandcraftedUrl !== undefined &&
+    !isAllowedProofUrl(body.proofOfHandcraftedUrl, auth.seller.userId)
+  ) {
+    errors.push("The proof-of-handcrafted file must be uploaded to UpSycle.");
   }
   errors.push(...validateInventoryAdjustment(body));
   if (body.marketingPriority !== undefined && !Number.isInteger(body.marketingPriority)) {

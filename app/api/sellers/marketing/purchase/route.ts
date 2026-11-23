@@ -15,6 +15,8 @@ import { prisma } from "@/lib/prisma";
 import { resolveSellerAuth, sellerAuthErrorResponse } from "@/lib/seller-auth";
 import { PAID_SLOT_COUNT, placementSlotPriceCents } from "@/lib/placement";
 import { getStripeClient } from "@/lib/stripe";
+import { randomIntegrationSuffix } from "@/lib/seller-billing";
+import { getSiteUrl } from "@/lib/site-url";
 import { formatDate } from "@/lib/format";
 
 interface PurchaseBody {
@@ -150,11 +152,21 @@ export async function POST(request: NextRequest) {
     sellerProfileId,
   };
 
-  const origin = request.headers.get("origin") ?? request.nextUrl.origin;
+  let siteUrl: string;
+  try {
+    siteUrl = getSiteUrl();
+  } catch (err) {
+    console.error("Featured-slot checkout refused because SITE_URL is not configured", err);
+    return NextResponse.json(
+      { error: "Payments are temporarily unavailable. Please try again shortly." },
+      { status: 503 },
+    );
+  }
 
   try {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
+      integration_identifier: `upsycle_placement_${randomIntegrationSuffix()}`,
       customer_email: email,
       line_items: [
         {
@@ -170,8 +182,8 @@ export async function POST(request: NextRequest) {
       ],
       metadata,
       payment_intent_data: { metadata },
-      success_url: `${origin}/sell/marketing`,
-      cancel_url: `${origin}/sell/marketing`,
+      success_url: `${siteUrl}/sell/marketing`,
+      cancel_url: `${siteUrl}/sell/marketing`,
     });
 
     if (!session.url) {

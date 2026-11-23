@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/current-user";
+import { listingSubscriptionSelect, sellerListingsArePublic } from "@/lib/public-catalog";
 import { validateQuestionInput } from "@/lib/validation/question";
 
 interface AskQuestionInput {
@@ -25,8 +26,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ errors: ["Please sign in to ask a question."] }, { status: 401 });
   }
 
-  const product = await prisma.product.findUnique({ where: { id }, select: { id: true } });
-  if (!product) {
+  const product = await prisma.product.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      sellerProfile: { select: { approvalStatus: true, subscription: { select: listingSubscriptionSelect } } },
+    },
+  });
+  if (!product || !sellerListingsArePublic(product.sellerProfile)) {
     return NextResponse.json({ errors: ["Product not found."] }, { status: 404 });
   }
 

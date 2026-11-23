@@ -10,12 +10,9 @@ interface SuccessPageProps {
   searchParams: Promise<{ session_id?: string }>;
 }
 
-// Best-effort lookup only: Order creation happens asynchronously via the
-// Stripe webhook (app/api/webhooks/stripe/route.ts), which may not have run
-// yet by the time the buyer's browser is redirected back here. We try to
-// find the order for a nicer confirmation; if it's not there yet (or Stripe
-// isn't configured — no live keys exist for this MVP pass) we fall back to
-// a generic "payment received" message rather than erroring.
+// Order creation happens in the Stripe webhook, which may not have run yet
+// when the browser lands here. "Payment received" is shown only when an
+// order row exists. Otherwise the page says the payment is still being confirmed.
 async function findOrderForSession(sessionId: string | undefined) {
   if (!sessionId) return null;
   try {
@@ -40,15 +37,14 @@ export default async function CheckoutSuccessPage({ searchParams }: SuccessPageP
 
   return (
     <section className="px-6 py-32 md:px-14">
-      <ClearCartOnMount />
+      {order ? <ClearCartOnMount /> : null}
       <div className="mx-auto max-w-xl text-center">
-        <div className="eyebrow justify-center before:hidden">Thank You</div>
-        <h1 className="sec-title">
-          Payment <em>received</em>
-        </h1>
-
         {order ? (
           <>
+            <div className="eyebrow justify-center before:hidden">Thank You</div>
+            <h1 className="sec-title">
+              Payment <em>received</em>
+            </h1>
             <p className="mb-8 text-[0.92rem] font-light leading-relaxed text-[var(--muted2)]">
               Your order has been placed. Each seller in your order ships their items independently, so you
               may receive separate packages.
@@ -75,10 +71,16 @@ export default async function CheckoutSuccessPage({ searchParams }: SuccessPageP
             </div>
           </>
         ) : (
-          <p className="mb-8 text-[0.92rem] font-light leading-relaxed text-[var(--muted2)]">
-            Your payment was received and is being processed. Your order confirmation will be available on
-            your account shortly.
-          </p>
+          <>
+            <div className="eyebrow justify-center before:hidden">Checkout</div>
+            <h1 className="sec-title">
+              We&apos;re <em>confirming</em> your payment
+            </h1>
+            <p className="mb-8 text-[0.92rem] font-light leading-relaxed text-[var(--muted2)]">
+              We don&apos;t have an order for this checkout yet. If you were charged, the order will show on
+              your account once payment is confirmed. If it doesn&apos;t appear, email support@upsyclemarket.com.
+            </p>
+          </>
         )}
 
         <Link href="/browse" className="btn-primary">

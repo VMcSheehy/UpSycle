@@ -80,7 +80,7 @@ export default function TermsPage() {
         </p>
         <p>
           You can contact us by phone at (760) 695-2784, email at{" "}
-          <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a>, or by mail
+          <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a>, or by mail
           to 3020 Alta Vista Dr, Fallbrook, CA 92028, United States.
         </p>
         <p>
@@ -167,7 +167,7 @@ export default function TermsPage() {
         <p>
           If you wish to make any use of the Services, Content, or Marks other than as set out in
           this section or elsewhere in our Legal Terms, please address your request to{" "}
-          <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a>. If we ever
+          <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a>. If we ever
           grant you permission to post, reproduce, or publicly display any part of our Services or
           Content, you must identify us as the owners or licensors of the Services, Content, or
           Marks and ensure that any copyright or proprietary notice appears or is visible on
@@ -352,7 +352,7 @@ export default function TermsPage() {
           You can cancel your subscription at any time by logging into your account. Your
           cancellation will take effect at the end of the current paid term. If you have any
           questions or are unsatisfied with our Services, please email us at{" "}
-          <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a>.
+          <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a>.
         </p>
         <h3>Fee Changes</h3>
         <p>
@@ -991,7 +991,7 @@ export default function TermsPage() {
         <p>
           If you have any questions or need assistance regarding our SMS communications, please
           reply with the keyword HELP. You can also email us at{" "}
-          <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a> or call at
+          <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a> or call at
           (760) 695-2784.
         </p>
       </LegalSection>
@@ -1062,7 +1062,7 @@ export default function TermsPage() {
           <br />
           Phone: (760) 695-2784
           <br />
-          <a href="mailto:vmcsheehy@upsyclemarket.com">vmcsheehy@upsyclemarket.com</a>
+          <a href="mailto:support@upsyclemarket.com">support@upsyclemarket.com</a>
         </p>
       </LegalSection>
     </LegalPageLayout>

@@ -10,9 +10,7 @@ import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { SellerApprovalStatus } from "@prisma/client";
 
-import { prisma } from "@/lib/prisma";
-import { getIdToken } from "@/lib/session";
-import { verifyIdToken } from "@/lib/verify-token";
+import { findSessionUserWithSeller } from "@/lib/session-user";
 
 export interface AuthedSeller {
   userId: string;
@@ -36,29 +34,11 @@ export type SellerAuthResolution =
  * Server Components and API routes.
  */
 export async function resolveSellerAuth(): Promise<SellerAuthResolution> {
-  const idToken = await getIdToken();
-  if (!idToken) {
+  const session = await findSessionUserWithSeller();
+  if (!session) {
     return { ok: false, failure: { kind: "unauthenticated" } };
   }
-
-  let cognitoSub: string;
-  let email: string | undefined;
-  try {
-    const claims = await verifyIdToken(idToken);
-    cognitoSub = claims.sub;
-    email = typeof claims.email === "string" ? claims.email : undefined;
-  } catch {
-    return { ok: false, failure: { kind: "unauthenticated" } };
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { cognitoSub },
-    include: { sellerProfile: true },
-  });
-
-  if (!user) {
-    return { ok: false, failure: { kind: "unauthenticated" } };
-  }
+  const { identity, user } = session;
 
   if (!user.sellerProfile) {
     return { ok: false, failure: { kind: "no-seller-profile" } };
@@ -78,7 +58,7 @@ export async function resolveSellerAuth(): Promise<SellerAuthResolution> {
     ok: true,
     seller: {
       userId: user.id,
-      email: email ?? user.email,
+      email: identity.email ?? user.email,
       sellerProfileId: user.sellerProfile.id,
     },
   };

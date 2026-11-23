@@ -7,37 +7,43 @@
 //    seller-vetting bucket (admin-review only, never public). fileUrl here
 //    is a plain (non-loadable) S3 URL — a future admin-review feature must
 //    re-sign a presigned GET from the stored key to actually view it.
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+//
+// Uploads use a presigned POST so S3 itself enforces the content type and a
+// content-length-range. The object key is scoped under the signed-in user.
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomUUID } from "crypto";
+
+import { MAX_UPLOAD_BYTES, isVettingPrefix, type UploadPrefix } from "@/lib/upload-policy";
 
 const REGION = process.env.AWS_REGION || process.env.COGNITO_REGION;
 const PRODUCT_PHOTOS_BUCKET = process.env.PHOTOS_BUCKET_NAME;
 const CDN_DOMAIN = process.env.PHOTOS_CDN_DOMAIN;
 const VETTING_BUCKET = process.env.SELLER_VETTING_BUCKET_NAME;
 
-const VETTING_KEY_PREFIXES = new Set(["seller-sample-photos", "proof-of-handcrafted"]);
-
 function getClient(): S3Client {
   return new S3Client({ region: REGION });
 }
 
 export interface PresignedUpload {
-  /** Client PUTs the file body directly to this URL. */
+  /** Browser POSTs the form fields, then the file, to this URL. */
   uploadUrl: string;
+  fields: Record<string, string>;
   /** Object URL to store in Postgres once the upload succeeds — only
    * browser-loadable for the "product-photos" prefix (see module doc above). */
   fileUrl: string;
   key: string;
 }
 
-/** Issues a short-lived presigned PUT URL for a single photo upload. */
+/** Issues a short-lived presigned POST for a single upload. */
 export async function createPresignedUpload(
-  fileName: string,
   contentType: string,
-  keyPrefix = "seller-sample-photos",
+  extension: string,
+  keyPrefix: UploadPrefix,
+  userId: string,
 ): Promise<PresignedUpload> {
-  const isVetting = VETTING_KEY_PREFIXES.has(keyPrefix);
+  const isVetting = isVettingPrefix(keyPrefix);
   const bucket = isVetting ? VETTING_BUCKET : PRODUCT_PHOTOS_BUCKET;
 
   if (!bucket) {
@@ -48,27 +54,32 @@ export async function createPresignedUpload(
   if (!isVetting && !CDN_DOMAIN) {
     throw new Error("PHOTOS_CDN_DOMAIN is not configured");
   }
+  if (!userId || userId.includes("/") || userId.includes("..")) {
+    throw new Error("A valid user id is required to scope the upload key.");
+  }
 
-  const extension = fileName.includes(".") ? fileName.split(".").pop() : undefined;
-  const key = `${keyPrefix}/${randomUUID()}${extension ? `.${extension}` : ""}`;
-
+  const key = `${keyPrefix}/${userId}/${randomUUID()}.${extension}`;
   const client = getClient();
-  const command = new PutObjectCommand({
+  const { url, fields } = await createPresignedPost(client, {
     Bucket: bucket,
     Key: key,
-    ContentType: contentType,
+    Conditions: [
+      ["content-length-range", 1, MAX_UPLOAD_BYTES],
+      ["eq", "$Content-Type", contentType],
+      ["eq", "$key", key],
+    ],
+    Fields: {
+      "Content-Type": contentType,
+      key,
+    },
+    Expires: 300,
   });
 
-  const uploadUrl = await getSignedUrl(client, command, { expiresIn: 300 });
-  // The product-photos bucket blocks all public access — it's only reachable
-  // through the CloudFront distribution fronting it, so its public-facing
-  // URL must point there, never at the bucket directly. The vetting bucket
-  // has no public URL at all by design (see module doc above).
   const fileUrl = isVetting
     ? `https://${bucket}.s3.${REGION}.amazonaws.com/${key}`
     : `https://${CDN_DOMAIN}/${key}`;
 
-  return { uploadUrl, fileUrl, key };
+  return { uploadUrl: url, fields, fileUrl, key };
 }
 
 /**

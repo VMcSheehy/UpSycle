@@ -128,6 +128,16 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                     ? "Local pickup — no shipping cost"
                     : `${formatPriceCents(item.shippingCostCents)} shipping`}
                 </div>
+                {item.trackingUrl ? (
+                  <a
+                    href={item.trackingUrl}
+                    className="mt-1 inline-block text-[0.78rem] text-[var(--rg-light)]"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Track package{item.trackingNumber ? ` ${item.trackingNumber}` : ""}
+                  </a>
+                ) : null}
               </div>
 
               <div className="text-right">
