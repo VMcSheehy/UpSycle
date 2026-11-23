@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { reorderProductPriority } from "@/lib/product-priority";
 import { resolveSellerAuth, sellerAuthErrorResponse } from "@/lib/seller-auth";
+import { inchesToTenths, ouncesToGrams, presetById } from "@/lib/shipping";
 import {
   MAX_PRODUCT_PHOTOS,
   MIN_PRODUCT_PHOTOS,
@@ -68,6 +69,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
   if (body.offersLocalPickup !== undefined && typeof body.offersLocalPickup !== "boolean") {
     errors.push("Offers local pickup must be true or false.");
+  }
+  if (body.needsFreightQuote !== undefined && typeof body.needsFreightQuote !== "boolean") {
+    errors.push("Oversized must be true or false.");
+  }
+  if (body.packagePreset && !presetById(body.packagePreset)) {
+    errors.push("Choose a package preset from the list.");
+  }
+  const parcelValues = [body.parcelLengthIn, body.parcelWidthIn, body.parcelHeightIn, body.parcelWeightOz];
+  if (parcelValues.some((value) => value != null) && !body.needsFreightQuote) {
+    if (parcelValues.some((value) => typeof value !== "number" || !Number.isFinite(value) || value <= 0)) {
+      errors.push("Enter length, width, height, and weight, or leave the package blank.");
+    } else if (parcelValues.slice(0, 3).some((value) => (value ?? 0) > 108) || (parcelValues[3] ?? 0) > 1120) {
+      errors.push("That package is too large for parcel shipping. Mark it as oversized.");
+    }
   }
   if (
     body.weightGrams !== undefined &&
@@ -137,8 +152,27 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           ...(body.priceCents !== undefined && { priceCents: body.priceCents }),
           ...(body.shippingCostCents !== undefined && { shippingCostCents: body.shippingCostCents }),
           ...(body.offersLocalPickup !== undefined && { offersLocalPickup: body.offersLocalPickup }),
-          ...(body.dimensions !== undefined && { dimensions: body.dimensions.trim() || null }),
-          ...(body.weightGrams !== undefined && { weightGrams: body.weightGrams }),
+          ...(body.needsFreightQuote !== undefined && { needsFreightQuote: body.needsFreightQuote }),
+          ...(body.packagePreset !== undefined && { packagePreset: body.packagePreset || null }),
+          ...(body.parcelLengthIn !== undefined && {
+            parcelLengthTenths: body.parcelLengthIn ? inchesToTenths(body.parcelLengthIn) : null,
+          }),
+          ...(body.parcelWidthIn !== undefined && {
+            parcelWidthTenths: body.parcelWidthIn ? inchesToTenths(body.parcelWidthIn) : null,
+          }),
+          ...(body.parcelHeightIn !== undefined && {
+            parcelHeightTenths: body.parcelHeightIn ? inchesToTenths(body.parcelHeightIn) : null,
+          }),
+          ...(body.parcelWeightOz !== undefined && {
+            parcelWeightTenths: body.parcelWeightOz ? inchesToTenths(body.parcelWeightOz) : null,
+            weightGrams: body.parcelWeightOz ? ouncesToGrams(body.parcelWeightOz) : null,
+          }),
+          ...(body.parcelLengthIn && body.parcelWidthIn && body.parcelHeightIn
+            ? { dimensions: `${body.parcelLengthIn} x ${body.parcelWidthIn} x ${body.parcelHeightIn} in` }
+            : body.dimensions !== undefined
+              ? { dimensions: body.dimensions.trim() || null }
+              : {}),
+          ...(body.weightGrams !== undefined && body.parcelWeightOz === undefined && { weightGrams: body.weightGrams }),
           ...(body.categoryId !== undefined && { categoryId: body.categoryId }),
           ...(body.proofOfHandcraftedUrl !== undefined && {
             proofOfHandcraftedUrl: body.proofOfHandcraftedUrl.trim(),

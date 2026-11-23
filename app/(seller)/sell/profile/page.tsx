@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 
 import { prisma } from "@/lib/prisma";
 import { requireSellerPageAuth, sellerAuthFailureMessage } from "@/lib/seller-auth";
+import ShipFromForm from "@/components/seller/ShipFromForm";
 import ShopStoryEditor from "@/components/seller/ShopStoryEditor";
 import BillingBanner, { currentPlanSummary } from "@/components/seller/BillingBanner";
 import { findSellerBillingRecord } from "@/lib/stripe-subscription-sync";
@@ -44,7 +45,16 @@ export default async function SellerProfilePage() {
   const [sellerProfile, billing] = await Promise.all([
     prisma.sellerProfile.findUniqueOrThrow({
       where: { id: auth.seller.sellerProfileId },
-      select: { slug: true, story: true },
+      select: {
+        slug: true,
+        story: true,
+        shipFromName: true,
+        shipFromLine1: true,
+        shipFromLine2: true,
+        shipFromCity: true,
+        shipFromState: true,
+        shipFromPostalCode: true,
+      },
     }),
     findSellerBillingRecord({ sellerProfileId: auth.seller.sellerProfileId }),
   ]);
@@ -66,6 +76,10 @@ export default async function SellerProfilePage() {
 
       <div className="border border-[var(--border)] bg-[var(--charcoal)] p-6 md:p-8">
         <ShopStoryEditor initialStory={sellerProfile.story ?? ""} />
+      </div>
+
+      <div className="mt-8">
+        <ShipFromForm initial={sellerProfile} />
       </div>
 
       <div className="mt-8">

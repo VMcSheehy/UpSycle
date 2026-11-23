@@ -2,6 +2,8 @@
 // client-side form (for immediate feedback) and the API routes (as the
 // authoritative check), same pattern as lib/validation/sellerSignup.ts.
 
+import { presetById } from "@/lib/shipping";
+
 export const MIN_PRODUCT_PHOTOS = 2;
 export const MAX_PRODUCT_PHOTOS = 6;
 
@@ -13,6 +15,12 @@ export interface ProductInput {
   offersLocalPickup?: boolean;
   dimensions?: string;
   weightGrams?: number;
+  packagePreset?: string | null;
+  parcelLengthIn?: number | null;
+  parcelWidthIn?: number | null;
+  parcelHeightIn?: number | null;
+  parcelWeightOz?: number | null;
+  needsFreightQuote?: boolean;
   inventoryCount: number;
   categoryId: string;
   proofOfHandcraftedUrl: string;
@@ -103,6 +111,23 @@ export function validateProductInput(
 
   if (input.offersLocalPickup !== undefined && typeof input.offersLocalPickup !== "boolean") {
     errors.push("Offers local pickup must be true or false.");
+  }
+
+  if (input.needsFreightQuote !== undefined && typeof input.needsFreightQuote !== "boolean") {
+    errors.push("Oversized must be true or false.");
+  }
+  if (input.packagePreset && !presetById(input.packagePreset)) {
+    errors.push("Choose a package preset from the list.");
+  }
+  const parcelValues = [input.parcelLengthIn, input.parcelWidthIn, input.parcelHeightIn, input.parcelWeightOz];
+  const parcelTouched = parcelValues.some((value) => value != null && value !== ("" as unknown));
+  if (parcelTouched && !input.needsFreightQuote) {
+    const numbers = parcelValues.map((value) => (typeof value === "number" ? value : Number.NaN));
+    if (numbers.some((value) => !Number.isFinite(value) || value <= 0)) {
+      errors.push("Enter length, width, height, and weight, or leave the package blank.");
+    } else if (numbers.slice(0, 3).some((value) => value > 108) || (numbers[3] ?? 0) > 1120) {
+      errors.push("That package is too large for parcel shipping. Mark it as oversized.");
+    }
   }
 
   if (input.weightGrams !== undefined && input.weightGrams !== null && !isNonNegativeInt(input.weightGrams)) {

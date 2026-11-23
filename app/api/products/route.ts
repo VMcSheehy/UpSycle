@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { resolveSellerAuth, sellerAuthErrorResponse } from "@/lib/seller-auth";
+import { inchesToTenths, ouncesToGrams } from "@/lib/shipping";
 import { type ProductInput, validateProductInput } from "@/lib/validation/product";
 
 export async function POST(request: NextRequest) {
@@ -56,8 +57,17 @@ export async function POST(request: NextRequest) {
           priceCents: input.priceCents,
           shippingCostCents: input.shippingCostCents,
           offersLocalPickup: input.offersLocalPickup ?? false,
-          dimensions: input.dimensions?.trim() || null,
-          weightGrams: input.weightGrams ?? null,
+          needsFreightQuote: input.needsFreightQuote ?? false,
+          packagePreset: input.packagePreset || null,
+          parcelLengthTenths: input.parcelLengthIn ? inchesToTenths(input.parcelLengthIn) : null,
+          parcelWidthTenths: input.parcelWidthIn ? inchesToTenths(input.parcelWidthIn) : null,
+          parcelHeightTenths: input.parcelHeightIn ? inchesToTenths(input.parcelHeightIn) : null,
+          parcelWeightTenths: input.parcelWeightOz ? inchesToTenths(input.parcelWeightOz) : null,
+          dimensions:
+            input.parcelLengthIn && input.parcelWidthIn && input.parcelHeightIn
+              ? `${input.parcelLengthIn} x ${input.parcelWidthIn} x ${input.parcelHeightIn} in`
+              : input.dimensions?.trim() || null,
+          weightGrams: input.parcelWeightOz ? ouncesToGrams(input.parcelWeightOz) : input.weightGrams ?? null,
           inventoryCount: input.inventoryCount,
           marketingPriority: existingCount + 1,
           proofOfHandcraftedUrl: input.proofOfHandcraftedUrl.trim(),

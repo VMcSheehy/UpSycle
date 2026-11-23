@@ -16,6 +16,36 @@ function sesClient(): SESv2Client {
   return client;
 }
 
+export async function sendTextEmail(input: {
+  to: string;
+  subject: string;
+  text: string;
+}): Promise<"sent" | "skipped" | "failed"> {
+  const from = process.env.SES_FROM_EMAIL?.trim();
+  if (!from) {
+    logInfo("email.skipped", { reason: "SES_FROM_EMAIL unset", subject: input.subject });
+    return "skipped";
+  }
+  try {
+    await sesClient().send(
+      new SendEmailCommand({
+        FromEmailAddress: from,
+        Destination: { ToAddresses: [input.to] },
+        Content: {
+          Simple: {
+            Subject: { Data: input.subject, Charset: "UTF-8" },
+            Body: { Text: { Data: input.text, Charset: "UTF-8" } },
+          },
+        },
+      }),
+    );
+    return "sent";
+  } catch (err) {
+    logError("email.failed", err, { subject: input.subject });
+    return "failed";
+  }
+}
+
 export async function sendOrderEmail(input: {
   to: string;
   kind: OrderEmailKind;
