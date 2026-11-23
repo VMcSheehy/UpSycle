@@ -9,7 +9,10 @@ import { shippingStatusLabel } from "@/lib/format";
 const STATUS_TONE: Record<ShippingStatus, string> = {
   PENDING_SHIPMENT: "border-[var(--border)] text-[var(--muted2)]",
   SHIPPED: "border-[var(--rg-core)] text-[var(--rg-light)]",
+  IN_TRANSIT: "border-[var(--rg-core)] text-[var(--rg-light)]",
+  OUT_FOR_DELIVERY: "border-[var(--rg-core)] text-[var(--rg-light)]",
   DELIVERED: "border-[var(--success)] text-[var(--success)]",
+  EXCEPTION: "border-[var(--danger)] text-[var(--danger)]",
   CANCELLED: "border-[var(--danger)] text-[var(--danger)]",
 };
 

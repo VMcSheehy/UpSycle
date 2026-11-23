@@ -91,6 +91,11 @@ export default async function OrderHistoryPage() {
                         <div className="text-[0.78rem] font-light text-[var(--muted2)]">
                           Qty {item.quantity} &middot; {formatPriceCents(item.unitPriceCents)} each
                         </div>
+                        {item.trackingUrl ? (
+                          <a href={item.trackingUrl} className="text-[0.75rem] text-[var(--rg-light)]" target="_blank" rel="noreferrer">
+                            Track package
+                          </a>
+                        ) : null}
                       </div>
                       <ShippingStatusBadge status={item.shippingStatus} fulfillmentMethod={item.fulfillmentMethod} />
                     </div>

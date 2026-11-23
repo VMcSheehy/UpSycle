@@ -24,6 +24,8 @@ interface OrderItemWithProduct {
   refundedAmountCents: number;
   shippingStatus: ShippingStatus;
   fulfillmentMethod: FulfillmentMethod;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
   createdAt: Date;
   product: { title: string; photos: { url: string }[] };
 }
@@ -39,6 +41,8 @@ function toSaleItemView(item: OrderItemWithProduct): SaleItemView {
     refundedAmountCents: item.refundedAmountCents,
     shippingStatus: item.shippingStatus,
     fulfillmentMethod: item.fulfillmentMethod,
+    trackingNumber: item.trackingNumber,
+    trackingUrl: item.trackingUrl,
     orderedAt: item.createdAt.toISOString(),
   };
 }
@@ -80,7 +84,7 @@ export default async function SellerSalesPage() {
       orderBy: { createdAt: "asc" },
     }),
     prisma.orderItem.findMany({
-      where: { sellerProfileId, shippingStatus: { in: ["SHIPPED", "DELIVERED", "CANCELLED"] } },
+      where: { sellerProfileId, shippingStatus: { not: "PENDING_SHIPMENT" } },
       include: productInclude,
       orderBy: { createdAt: "desc" },
       take: 50,

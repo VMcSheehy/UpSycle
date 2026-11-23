@@ -467,8 +467,18 @@ model ProductQuestion {
 enum ShippingStatus {
   PENDING_SHIPMENT
   SHIPPED
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
   DELIVERED
+  EXCEPTION
   CANCELLED
+}
+
+enum ShippingCarrier {
+  USPS
+  UPS
+  FEDEX
+  DHL
 }
 
 // Per-line-item fulfillment choice made by the buyer at checkout (only
@@ -566,13 +576,39 @@ model OrderItem {
   refundedAmountCents Int     @default(0)
   stripeRefundId      String?
 
+  // Carrier tracking. The public link works without a tracking account.
+  // providerTrackerId is set only when EasyPost accepts the number.
+  carrier           ShippingCarrier?
+  trackingNumber    String?
+  trackingUrl       String?
+  trackingProvider  String?
+  providerTrackerId String?
+
   createdAt DateTime @default(now())
 
-  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
-  sellerProfile SellerProfile @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+  trackingEvents TrackingEvent[]
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product        Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  sellerProfile  SellerProfile  @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
 
+  @@index([providerTrackerId])
+  @@index([carrier, trackingNumber])
   @@map("order_items")
+}
+
+// One row per provider webhook event. The provider event id is unique so a
+// retry does not move the line or email the buyer again.
+model TrackingEvent {
+  id              String   @id @default(uuid())
+  providerEventId String   @unique
+  orderItemId     String?
+  carrierStatus   String
+  createdAt       DateTime @default(now())
+
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+
+  @@index([orderItemId])
+  @@map("tracking_events")
 }
 
 // ---------------------------------------------------------------------------

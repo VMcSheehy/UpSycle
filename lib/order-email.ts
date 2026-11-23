@@ -22,6 +22,8 @@ export async function sendOrderEmail(input: {
   orderId: string;
   productTitle?: string;
   refundCents?: number;
+  trackingUrl?: string | null;
+  detail?: string | null;
 }): Promise<"sent" | "skipped" | "failed"> {
   const from = process.env.SES_FROM_EMAIL?.trim();
   const content = orderEmailContent(input);

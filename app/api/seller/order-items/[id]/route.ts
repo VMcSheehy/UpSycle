@@ -8,12 +8,14 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ShippingStatus } from "@prisma/client";
 
 import { logError } from "@/lib/log";
-import { aggregateOrderStatus, lineChargeCents, planOrderItemChange } from "@/lib/order-status";
+import { aggregateOrderStatus, lineChargeCents, planOrderItemChange, type LineStatus } from "@/lib/order-status";
 import { sendOrderEmail } from "@/lib/order-email";
 import { prisma } from "@/lib/prisma";
 import { getApprovedSeller } from "@/lib/require-seller";
 import { getStripeClient } from "@/lib/stripe";
 import { refundStripePayment } from "@/lib/stripe-refund";
+import { planTrackingAddition } from "@/lib/tracking";
+import { getTrackingProvider } from "@/lib/tracking-provider";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -27,14 +29,11 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
   const { id } = await params;
 
-  let body: { shippingStatus?: string } = {};
+  let body: { shippingStatus?: string; carrier?: string; trackingNumber?: string } = {};
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
-  }
-  if (!body.shippingStatus) {
-    return NextResponse.json({ error: "Choose shipped, delivered, or cancelled." }, { status: 400 });
   }
 
   const orderItem = await prisma.orderItem.findUnique({
@@ -47,6 +46,13 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
   if (!orderItem || orderItem.sellerProfileId !== seller.sellerProfile.id) {
     return NextResponse.json({ error: "Order item not found." }, { status: 404 });
+  }
+
+  if (body.trackingNumber || body.carrier) {
+    return addTracking(orderItem, body);
+  }
+  if (!body.shippingStatus) {
+    return NextResponse.json({ error: "Choose shipped, delivered, or cancelled." }, { status: 400 });
   }
 
   const chargeCents = lineChargeCents(orderItem);
@@ -138,6 +144,97 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
   }
 
   await notifyBuyer(plan.to, orderItem.order.buyer.email, orderItem.order.id, orderItem.product.title, plan.refundCents);
+
+  return NextResponse.json({ orderItem: updated });
+}
+
+async function addTracking(
+  orderItem: {
+    id: string;
+    orderId: string;
+    productId: string;
+    fulfillmentMethod: "SHIP" | "PICKUP";
+    shippingStatus: LineStatus;
+    trackingNumber: string | null;
+    product: { title: string };
+    order: { id: string; buyer: { email: string } };
+  },
+  body: { carrier?: string; trackingNumber?: string },
+) {
+  const draft = planTrackingAddition({
+    fulfillment: orderItem.fulfillmentMethod,
+    current: orderItem.shippingStatus,
+    alreadyHasTracking: Boolean(orderItem.trackingNumber),
+    carrier: body.carrier,
+    trackingNumber: body.trackingNumber,
+  });
+  if (!draft.ok) return NextResponse.json({ error: draft.error }, { status: draft.status });
+
+  const registered = await getTrackingProvider()?.register({
+    carrier: draft.carrier,
+    trackingNumber: draft.trackingNumber,
+  });
+  const planned = planTrackingAddition({
+    fulfillment: orderItem.fulfillmentMethod,
+    current: orderItem.shippingStatus,
+    alreadyHasTracking: Boolean(orderItem.trackingNumber),
+    carrier: draft.carrier,
+    trackingNumber: draft.trackingNumber,
+    providerStatus: registered?.status,
+    providerDetail: registered?.statusDetail,
+  });
+  if (!planned.ok) return NextResponse.json({ error: planned.error }, { status: planned.status });
+
+  const trackingUrl = registered?.publicUrl || planned.trackingUrl;
+  const updated = await prisma.$transaction(async (tx) => {
+    const changed = await tx.orderItem.updateMany({
+      where: {
+        id: orderItem.id,
+        shippingStatus: orderItem.shippingStatus,
+        trackingNumber: null,
+      },
+      data: {
+        carrier: planned.carrier,
+        trackingNumber: planned.trackingNumber,
+        trackingUrl,
+        trackingProvider: registered?.trackerId ? "easypost" : null,
+        providerTrackerId: registered?.trackerId,
+        shippingStatus: planned.nextStatus,
+      },
+    });
+    if (changed.count !== 1) return null;
+    const lines = await tx.orderItem.findMany({
+      where: { orderId: orderItem.orderId },
+      select: { shippingStatus: true },
+    });
+    await tx.order.update({
+      where: { id: orderItem.orderId },
+      data: { shippingStatus: aggregateOrderStatus(lines.map((line) => line.shippingStatus)) },
+    });
+    return tx.orderItem.findUnique({ where: { id: orderItem.id } });
+  });
+
+  if (!updated) {
+    return NextResponse.json({ error: "This item already has a tracking number." }, { status: 409 });
+  }
+
+  await sendOrderEmail({
+    to: orderItem.order.buyer.email,
+    kind: "shipped",
+    orderId: orderItem.order.id,
+    productTitle: orderItem.product.title,
+    trackingUrl,
+  });
+  if (planned.nextStatus === "DELIVERED" || planned.nextStatus === "EXCEPTION") {
+    await sendOrderEmail({
+      to: orderItem.order.buyer.email,
+      kind: planned.nextStatus === "DELIVERED" ? "delivered" : "exception",
+      orderId: orderItem.order.id,
+      productTitle: orderItem.product.title,
+      trackingUrl,
+      detail: registered?.statusDetail,
+    });
+  }
 
   return NextResponse.json({ orderItem: updated });
 }

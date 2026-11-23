@@ -1,4 +1,11 @@
-export type LineStatus = "PENDING_SHIPMENT" | "SHIPPED" | "DELIVERED" | "CANCELLED";
+export type LineStatus =
+  | "PENDING_SHIPMENT"
+  | "SHIPPED"
+  | "IN_TRANSIT"
+  | "OUT_FOR_DELIVERY"
+  | "DELIVERED"
+  | "EXCEPTION"
+  | "CANCELLED";
 
 export function lineChargeCents(item: {
   quantity: number;
@@ -8,9 +15,11 @@ export function lineChargeCents(item: {
   return item.unitPriceCents * item.quantity + item.shippingCostCents;
 }
 
+const MANUAL_DELIVERED_FROM: LineStatus[] = ["SHIPPED", "IN_TRANSIT", "OUT_FOR_DELIVERY", "EXCEPTION"];
+
 export function canTransition(from: LineStatus, to: LineStatus): boolean {
   if (from === "PENDING_SHIPMENT" && (to === "SHIPPED" || to === "CANCELLED")) return true;
-  if (from === "SHIPPED" && to === "DELIVERED") return true;
+  if (MANUAL_DELIVERED_FROM.includes(from) && to === "DELIVERED") return true;
   return false;
 }
 
@@ -20,9 +29,12 @@ export function canTransition(from: LineStatus, to: LineStatus): boolean {
 export function aggregateOrderStatus(lines: LineStatus[]): LineStatus {
   const active = lines.filter((status) => status !== "CANCELLED");
   if (active.length === 0) return "CANCELLED";
-  if (active.every((status) => status === "DELIVERED")) return "DELIVERED";
   if (active.some((status) => status === "PENDING_SHIPMENT")) return "PENDING_SHIPMENT";
-  return "SHIPPED";
+  if (active.some((status) => status === "EXCEPTION")) return "EXCEPTION";
+  if (active.some((status) => status === "SHIPPED")) return "SHIPPED";
+  if (active.some((status) => status === "IN_TRANSIT")) return "IN_TRANSIT";
+  if (active.some((status) => status === "OUT_FOR_DELIVERY")) return "OUT_FOR_DELIVERY";
+  return "DELIVERED";
 }
 
 export type OrderItemPlan =

@@ -69,7 +69,14 @@ export function sellerTierLabel(tier: SellerTierId): string {
   return `${plan.tierLabel} · ${plan.name}`;
 }
 
-type ShippingStatusValue = "PENDING_SHIPMENT" | "SHIPPED" | "DELIVERED" | "CANCELLED";
+type ShippingStatusValue =
+  | "PENDING_SHIPMENT"
+  | "SHIPPED"
+  | "IN_TRANSIT"
+  | "OUT_FOR_DELIVERY"
+  | "DELIVERED"
+  | "EXCEPTION"
+  | "CANCELLED";
 type FulfillmentMethodValue = "SHIP" | "PICKUP";
 
 // A pickup line reuses the same ShippingStatus transitions as a shipped line
@@ -99,8 +106,14 @@ export function shippingStatusLabel(
       return "Pending Shipment";
     case "SHIPPED":
       return "Shipped";
+    case "IN_TRANSIT":
+      return "In transit";
+    case "OUT_FOR_DELIVERY":
+      return "Out for delivery";
     case "DELIVERED":
       return "Delivered";
+    case "EXCEPTION":
+      return "Delivery problem";
     case "CANCELLED":
       return "Cancelled";
   }

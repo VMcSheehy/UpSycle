@@ -122,7 +122,8 @@ describe("order email", () => {
       productTitle: "Bowl",
       refundCents: 1250,
     });
-    expect(content.subject).toContain("order-12");
+    expect(content.subject).toContain("was cancelled");
+    expect(content.text).toContain("order-12345678");
     expect(content.text).toContain("Bowl");
     expect(content.text).toContain("$12.50");
 

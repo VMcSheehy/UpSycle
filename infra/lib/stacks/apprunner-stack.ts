@@ -161,6 +161,9 @@ export class AppRunnerStack extends cdk.Stack {
               { name: "PHOTOS_CDN_DOMAIN", value: props.productPhotosCdnDomain },
               { name: "SELLER_VETTING_BUCKET_NAME", value: props.sellerVettingPhotosBucket.bucketName },
               { name: "SITE_URL", value: props.siteUrl },
+              // EASYPOST_API_KEY and EASYPOST_WEBHOOK_SECRET are optional.
+              // Set them on the service when Victoria has an EasyPost account.
+              // A missing key keeps carrier tracking links and skips auto-updates.
               { name: "SES_FROM_EMAIL", value: `support@${props.sesIdentityDomain.toLowerCase()}` },
             ],
             // DATABASE_URL can't be handed over as one composed connection
