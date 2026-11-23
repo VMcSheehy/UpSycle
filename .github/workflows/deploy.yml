@@ -35,6 +35,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Test
+        run: npm test
+
       - name: Build
         run: npm run build
         env:
@@ -76,6 +79,12 @@ jobs:
         working-directory: infra
         run: npm ci
 
+      # Network, data, the app, and the weekly lottery. Auth and storage
+      # deploy with App Runner because it depends on them. DnsStack and
+      # EmailStack stay out of this job: the domain cutover and SES
+      # production access are owner steps. After CicdStack exists, run
+      # infra/scripts/bootstrap-account.sh once so the CDK execution role
+      # drops AdministratorAccess.
       - name: cdk deploy
         working-directory: infra
         run: npx cdk deploy UpSycle-NetworkStack UpSycle-DataStack UpSycle-AppRunnerStack UpSycle-PlacementStack --require-approval never

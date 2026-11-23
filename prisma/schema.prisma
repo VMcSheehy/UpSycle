@@ -558,9 +558,13 @@ model OrderItem {
   fulfillmentMethod FulfillmentMethod @default(SHIP)
 
   // Per-line-item shipment tracking. A single Order can contain items from
-  // multiple sellers, each of whom ships independently — so "mark as
-  // shipped" (issue #13) must act here, not on Order.shippingStatus.
+  // multiple sellers, each of whom ships independently — so ship, deliver,
+  // and cancel act here. Order.shippingStatus is rewritten from these lines.
   shippingStatus ShippingStatus @default(PENDING_SHIPMENT)
+  // Set when a cancel refund is accepted by Stripe. A retry uses the same
+  // idempotency key and then fills this in if the first attempt failed.
+  refundedAmountCents Int     @default(0)
+  stripeRefundId      String?
 
   createdAt DateTime @default(now())
 
@@ -608,6 +612,8 @@ model PlacementPeriod {
   id       String                @id @default(uuid())
   startsAt DateTime // Sunday 00:00 this period goes/went live
   endsAt   DateTime // following Sunday 00:00
+  // At most one PENDING row. A second Saturday draw reuses it. The partial
+  // unique index placement_periods_one_pending enforces that in Postgres.
   status   PlacementPeriodStatus @default(PENDING)
   drawnAt  DateTime              @default(now())
 

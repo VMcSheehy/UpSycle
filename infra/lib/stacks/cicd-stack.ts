@@ -23,10 +23,11 @@ export interface CicdStackProps extends cdk.StackProps {
  * account nor donfouts/UpSycle is hardcoded here.
  *
  * DeployRole's own policy can only assume the four CDK bootstrap roles in
- * this account and region. Those bootstrap roles are still powerful inside
- * the account — that is how `cdk deploy` works — so this role should live
- * in Victoria's own AWS account, not a shared one. It cannot call other
- * AWS APIs directly.
+ * this account and region. It cannot call other AWS APIs directly. The
+ * bootstrap CloudFormation execution role is the one that creates resources.
+ * UpSycleCloudFormationExecution replaces that role's AdministratorAccess
+ * policy. Run infra/scripts/bootstrap-account.sh once, after this stack
+ * exists, in Victoria's account. The GitHub trust target is unchanged.
  */
 export class CicdStack extends cdk.Stack {
   public readonly deployRole: iam.Role;
@@ -67,6 +68,106 @@ export class CicdStack extends cdk.Stack {
       })
     );
 
+    const executionPolicy = new iam.ManagedPolicy(this, "CloudFormationExecutionPolicy", {
+      managedPolicyName: "UpSycleCloudFormationExecution",
+      description:
+        "Replaces AdministratorAccess on the CDK CloudFormation execution role. UpSycle services only. No IAM users and no AWS Organizations.",
+      statements: executionPolicyStatements(this.account),
+    });
+
     new cdk.CfnOutput(this, "DeployRoleArn", { value: this.deployRole.roleArn });
+    new cdk.CfnOutput(this, "ExecutionPolicyArn", { value: executionPolicy.managedPolicyArn });
   }
+}
+
+function executionPolicyStatements(account: string): iam.PolicyStatement[] {
+  const roleArn = `arn:aws:iam::${account}:role`;
+  return [
+    new iam.PolicyStatement({
+      actions: [
+        "ec2:*",
+        "rds:*",
+        "apprunner:*",
+        "lambda:*",
+        "logs:*",
+        "events:*",
+        "cloudfront:*",
+        "cognito-idp:*",
+        "ses:*",
+        "secretsmanager:*",
+        "ssm:*",
+        "ecr:*",
+        "s3:*",
+        "kms:*",
+        "cloudformation:*",
+        "elasticloadbalancing:*",
+      ],
+      resources: ["*"],
+    }),
+    new iam.PolicyStatement({
+      actions: [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:UpdateRole",
+        "iam:PassRole",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:CreatePolicy",
+        "iam:DeletePolicy",
+        "iam:GetPolicy",
+        "iam:GetPolicyVersion",
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicyVersion",
+        "iam:ListPolicyVersions",
+        "iam:TagPolicy",
+        "iam:UntagPolicy",
+        "iam:CreateServiceLinkedRole",
+      ],
+      resources: [
+        `${roleArn}/UpSycle-*`,
+        `${roleArn}/cdk-*`,
+        `${roleArn}/aws-service-role/*`,
+        `arn:aws:iam::${account}:policy/UpSycle*`,
+        `arn:aws:iam::${account}:policy/cdk-*`,
+      ],
+    }),
+    new iam.PolicyStatement({
+      effect: iam.Effect.DENY,
+      actions: [
+        "iam:CreateUser",
+        "iam:DeleteUser",
+        "iam:CreateAccessKey",
+        "iam:UpdateAccessKey",
+        "iam:DeleteAccessKey",
+        "iam:CreateLoginProfile",
+        "iam:UpdateLoginProfile",
+        "organizations:*",
+        "account:*",
+      ],
+      resources: ["*"],
+    }),
+    new iam.PolicyStatement({
+      effect: iam.Effect.DENY,
+      actions: ["iam:AttachRolePolicy"],
+      resources: ["*"],
+      conditions: {
+        ArnEquals: {
+          "iam:PolicyARN": [
+            "arn:aws:iam::aws:policy/AdministratorAccess",
+            "arn:aws:iam::aws:policy/IAMFullAccess",
+            "arn:aws:iam::aws:policy/PowerUserAccess",
+          ],
+        },
+      },
+    }),
+  ];
 }

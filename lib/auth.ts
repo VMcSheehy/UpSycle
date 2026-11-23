@@ -3,8 +3,7 @@ import { NextResponse } from "next/server";
 import { Role } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import { getIdToken } from "@/lib/session";
-import { verifyIdToken } from "@/lib/verify-token";
+import { findSessionUserWithRoles } from "@/lib/session-user";
 
 // Server-side identity resolution shared by every protected page/route that
 // needs to know *who* is signed in (not just *that* someone is signed in —
@@ -21,21 +20,7 @@ export interface CurrentUser {
 }
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
-  const idToken = await getIdToken();
-  if (!idToken) return null;
-
-  let cognitoSub: string;
-  try {
-    const claims = await verifyIdToken(idToken);
-    cognitoSub = claims.sub;
-  } catch {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { cognitoSub },
-    include: { roles: true },
-  });
+  const user = await findSessionUserWithRoles();
   if (!user) return null;
 
   return {

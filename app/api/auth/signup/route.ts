@@ -1,8 +1,11 @@
 import { Role } from "@prisma/client";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { deleteUnconfirmedUser, getCognitoErrorMessage, signUp } from "@/lib/cognito";
+import { publicAuthError } from "@/lib/auth-errors";
+import { deleteUnconfirmedUser, signUp } from "@/lib/cognito";
+import { logError } from "@/lib/log";
 import { prisma } from "@/lib/prisma";
+import { AUTH_WINDOW_MS, SIGNUP_LIMIT, rateLimitResponse } from "@/lib/rate-limit";
 import { SUPPORT_EMAIL } from "@/lib/support-email";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +50,9 @@ function validate(body: Partial<SignupBody>): string | null {
 }
 
 export async function POST(request: NextRequest) {
+  const limited = rateLimitResponse(request, "buyer-signup", SIGNUP_LIMIT, AUTH_WINDOW_MS);
+  if (limited) return limited;
+
   let body: Partial<SignupBody>;
   try {
     body = await request.json();
@@ -68,7 +74,8 @@ export async function POST(request: NextRequest) {
     const result = await signUp({ email, password, firstName, lastName });
     userSub = result.userSub;
   } catch (err) {
-    return NextResponse.json({ error: getCognitoErrorMessage(err) }, { status: 400 });
+    logError("auth.signup", err);
+    return NextResponse.json({ error: publicAuthError(err, "signup") }, { status: 400 });
   }
 
   // 2. Mirror the minimal profile into Postgres: User + BUYER role +

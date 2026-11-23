@@ -23,6 +23,9 @@ import { fulfillPlacementSlot } from "@/lib/placement-fulfillment";
 import { PAID_SLOT_COUNT, placementSlotPriceCents } from "@/lib/placement";
 import { parseStoredCartLines } from "@/lib/stored-cart";
 import { paymentIntentIdFromSession, refundStripePayment } from "@/lib/stripe-refund";
+import { checkoutEventShouldFulfill } from "@/lib/stripe-events";
+import { sendOrderEmail } from "@/lib/order-email";
+import { logError } from "@/lib/log";
 import {
   applyStripeBillingSignal,
   invoiceSubscriptionId,
@@ -98,7 +101,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true, outcome });
   }
 
-  if (event.type !== "checkout.session.completed" && event.type !== "checkout.session.async_payment_succeeded") {
+  if (!checkoutEventShouldFulfill(event.type)) {
     return NextResponse.json({ received: true });
   }
 
@@ -121,10 +124,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Seller subscription is not ready to record." }, { status: 500 });
     }
     return NextResponse.json({ received: true, outcome });
-  }
-
-  if (event.type !== "checkout.session.completed") {
-    return NextResponse.json({ received: true });
   }
 
   const metadata = session.metadata ?? {};
@@ -193,6 +192,7 @@ async function handleCartCheckout(
     if (result.outcome === "refunded") {
       return NextResponse.json({ received: true, refunded: true, reason: result.reason });
     }
+    await notifyOrderPlaced(result.orderId, result.refundedCents);
     return NextResponse.json({ received: true, orderId: result.orderId, refundedCents: result.refundedCents });
   } catch (err) {
     console.error("Failed to record order after Stripe payment confirmation:", err, {
@@ -251,6 +251,24 @@ async function handlePlacementSlotPurchase(
       stripePaymentId,
     });
     return NextResponse.json({ error: "Failed to record placement slot purchase." }, { status: 500 });
+  }
+}
+
+async function notifyOrderPlaced(orderId: string, refundedCents: number): Promise<void> {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, buyer: { select: { email: true } } },
+    });
+    if (!order?.buyer.email) return;
+    await sendOrderEmail({
+      to: order.buyer.email,
+      kind: "placed",
+      orderId: order.id,
+      refundCents: refundedCents,
+    });
+  } catch (err) {
+    logError("order-email.placed", err, { orderId });
   }
 }
 

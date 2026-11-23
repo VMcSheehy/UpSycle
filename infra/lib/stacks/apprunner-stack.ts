@@ -27,6 +27,8 @@ export interface AppRunnerStackProps extends cdk.StackProps {
   stripeWebhookSecretName: string;
   /** Fixed public origin for Stripe return URLs. Not taken from request headers. */
   siteUrl: string;
+  /** SES domain identity, the same value EmailStack registers. */
+  sesIdentityDomain: string;
 }
 
 /**
@@ -108,6 +110,17 @@ export class AppRunnerStack extends cdk.Stack {
         resources: [props.userPoolArn],
       })
     );
+    // Order mail. Sending fails closed in the app (the status change is kept)
+    // until the domain identity is verified and SES is out of the sandbox.
+    const sesIdentities = [...new Set([props.sesIdentityDomain, props.sesIdentityDomain.toLowerCase()])];
+    instanceRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["ses:SendEmail"],
+        resources: sesIdentities.map(
+          (domain) => `arn:aws:ses:${this.region}:${this.account}:identity/${domain}`,
+        ),
+      })
+    );
 
     const stripeSecretKey = secretsmanager.Secret.fromSecretNameV2(
       this,
@@ -148,6 +161,7 @@ export class AppRunnerStack extends cdk.Stack {
               { name: "PHOTOS_CDN_DOMAIN", value: props.productPhotosCdnDomain },
               { name: "SELLER_VETTING_BUCKET_NAME", value: props.sellerVettingPhotosBucket.bucketName },
               { name: "SITE_URL", value: props.siteUrl },
+              { name: "SES_FROM_EMAIL", value: `support@${props.sesIdentityDomain.toLowerCase()}` },
             ],
             // DATABASE_URL can't be handed over as one composed connection
             // string — Secrets Manager ARN references extract a single JSON

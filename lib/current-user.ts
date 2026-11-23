@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { prisma } from "@/lib/prisma";
-import { getIdToken } from "@/lib/session";
-import { verifyIdToken } from "@/lib/verify-token";
+import { findSessionUser } from "@/lib/session-user";
 import type { User } from "@prisma/client";
 
 // Shared "who is logged in" resolvers for anything past app/account/page.tsx's
@@ -16,43 +14,13 @@ import type { User } from "@prisma/client";
 // -> matching `User.cognitoSub` row.
 
 export async function getCurrentUser(): Promise<User | null> {
-  const idToken = await getIdToken();
-  if (!idToken) return null;
-
-  let cognitoSub: string;
-  try {
-    const claims = await verifyIdToken(idToken);
-    cognitoSub = claims.sub;
-  } catch {
-    return null;
-  }
-
-  return prisma.user.findUnique({ where: { cognitoSub } });
+  return findSessionUser();
 }
 
 export async function requireCurrentUser(redirectTo: string): Promise<User> {
-  const loginUrl = `/login?redirectTo=${encodeURIComponent(redirectTo)}`;
-
-  const idToken = await getIdToken();
-  if (!idToken) {
-    redirect(loginUrl);
-  }
-
-  let sub: string;
-  try {
-    const claims = await verifyIdToken(idToken);
-    if (typeof claims.sub !== "string") {
-      throw new Error("ID token missing sub claim");
-    }
-    sub = claims.sub;
-  } catch {
-    redirect(loginUrl);
-  }
-
-  const user = await prisma.user.findUnique({ where: { cognitoSub: sub } });
+  const user = await getCurrentUser();
   if (!user) {
-    redirect(loginUrl);
+    redirect(`/login?redirectTo=${encodeURIComponent(redirectTo)}`);
   }
-
   return user;
 }

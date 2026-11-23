@@ -1,14 +1,9 @@
 import type { SellerProfile } from "@prisma/client";
 
-import { prisma } from "@/lib/prisma";
-import { getIdToken } from "@/lib/session";
-import { verifyIdToken } from "@/lib/verify-token";
+import { findSessionUserWithSeller } from "@/lib/session-user";
 
-// Resolves the logged-in user's SellerProfile from the Cognito-backed
-// session cookie. Small standalone helper — the parallel
-// feature/seller-product-mgmt branch needs the same "must be an APPROVED
-// seller" check and may grow its own copy; duplication here is fine and
-// expected to be reconciled whichever branch merges second.
+// Seller-page session states. The Cognito subject lookup is shared with
+// lib/seller-auth.ts via lib/session-user.ts. Roles are Postgres rows.
 export type SellerSessionState =
   | { status: "unauthenticated" }
   | { status: "no-profile"; userId: string }
@@ -16,27 +11,11 @@ export type SellerSessionState =
   | { status: "approved"; userId: string; sellerProfile: SellerProfile };
 
 export async function getSellerSessionState(): Promise<SellerSessionState> {
-  const idToken = await getIdToken();
-  if (!idToken) {
+  const session = await findSessionUserWithSeller();
+  if (!session) {
     return { status: "unauthenticated" };
   }
-
-  let cognitoSub: string;
-  try {
-    const claims = await verifyIdToken(idToken);
-    cognitoSub = claims.sub;
-  } catch {
-    return { status: "unauthenticated" };
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { cognitoSub },
-    include: { sellerProfile: true },
-  });
-
-  if (!user) {
-    return { status: "unauthenticated" };
-  }
+  const { user } = session;
   if (!user.sellerProfile) {
     return { status: "no-profile", userId: user.id };
   }

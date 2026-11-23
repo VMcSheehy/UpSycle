@@ -20,6 +20,8 @@ interface OrderItemWithProduct {
   id: string;
   quantity: number;
   unitPriceCents: number;
+  shippingCostCents: number;
+  refundedAmountCents: number;
   shippingStatus: ShippingStatus;
   fulfillmentMethod: FulfillmentMethod;
   createdAt: Date;
@@ -33,6 +35,8 @@ function toSaleItemView(item: OrderItemWithProduct): SaleItemView {
     thumbnailUrl: item.product.photos[0]?.url ?? null,
     quantity: item.quantity,
     unitPriceCents: item.unitPriceCents,
+    shippingCostCents: item.shippingCostCents,
+    refundedAmountCents: item.refundedAmountCents,
     shippingStatus: item.shippingStatus,
     fulfillmentMethod: item.fulfillmentMethod,
     orderedAt: item.createdAt.toISOString(),
@@ -103,7 +107,7 @@ export default async function SellerSalesPage() {
           Your <em>Sales</em>
         </h1>
         <p className="max-w-xl text-[0.95rem] font-light leading-loose text-[var(--muted2)]">
-          Track incoming orders, mark items as shipped, and keep an eye on this month&apos;s revenue.
+          Track incoming orders, mark items shipped or delivered, and cancel a line that has not shipped yet. A cancel refunds that line.
         </p>
       </div>
 

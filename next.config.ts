@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { securityHeaders } from "./lib/security-headers";
+
 const nextConfig: NextConfig = {
   // Standalone output produces a minimal, self-contained server bundle
   // (only the files actually needed at runtime, with a pruned
@@ -12,6 +14,10 @@ const nextConfig: NextConfig = {
   // Next.js SSR process despite extensive troubleshooting (see git history
   // on hosting-stack.ts, now removed, for the full account).
   output: "standalone",
+
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders() }];
+  },
 
   async redirects() {
     return [

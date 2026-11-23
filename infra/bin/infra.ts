@@ -119,6 +119,7 @@ const appRunnerStack = new AppRunnerStack(app, "UpSycle-AppRunnerStack", {
   stripeSecretKeyName,
   stripeWebhookSecretName,
   siteUrl: `https://${String(domainName).toLowerCase()}`,
+  sesIdentityDomain: String(domainName),
 });
 appRunnerStack.addDependency(dataStack);
 appRunnerStack.addDependency(authStack);

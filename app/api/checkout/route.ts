@@ -35,6 +35,7 @@ import { getSiteUrl } from "@/lib/site-url";
 import { listingSubscriptionSelect, sellerListingsArePublic } from "@/lib/public-catalog";
 import { orderTotalCents, type StoredCartLine } from "@/lib/stored-cart";
 import { MAX_CART_LINES, MAX_QUANTITY_PER_LINE, type CheckoutCartItem } from "@/lib/cart";
+import { randomIntegrationSuffix } from "@/lib/seller-billing";
 
 interface CheckoutBody {
   items?: CheckoutCartItem[];
@@ -214,6 +215,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
+      integration_identifier: `upsycle_cart_${randomIntegrationSuffix()}`,
       customer_email: user.email,
       line_items: lineItems,
       metadata,

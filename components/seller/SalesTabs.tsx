@@ -12,6 +12,8 @@ export interface SaleItemView {
   thumbnailUrl: string | null;
   quantity: number;
   unitPriceCents: number;
+  shippingCostCents: number;
+  refundedAmountCents: number;
   shippingStatus: ShippingStatus;
   fulfillmentMethod: FulfillmentMethod;
   orderedAt: string; // ISO string — Dates aren't passed across the server/client boundary
@@ -51,7 +53,11 @@ export default function SalesTabs({
   const [errorFor, setErrorFor] = useState<Record<string, string>>({});
   const [, startTransition] = useTransition();
 
-  async function markShipped(itemId: string) {
+  async function updateStatus(itemId: string, shippingStatus: ShippingStatus) {
+    if (shippingStatus === "CANCELLED") {
+      const ok = window.confirm("Cancel this item and refund the buyer?");
+      if (!ok) return;
+    }
     setInFlightIds((prev) => new Set(prev).add(itemId));
     setErrorFor((prev) => {
       const next = { ...prev };
@@ -63,13 +69,18 @@ export default function SalesTabs({
       const res = await fetch(`/api/seller/order-items/${itemId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shippingStatus: "SHIPPED" }),
+        body: JSON.stringify({ shippingStatus }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.error ?? "Failed to update.");
       }
       startTransition(() => router.refresh());
+      setInFlightIds((prev) => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
     } catch (err) {
       setErrorFor((prev) => ({
         ...prev,
@@ -104,7 +115,7 @@ export default function SalesTabs({
 
       {items.length === 0 ? (
         <p className="py-10 text-center text-[0.85rem] font-light text-[var(--muted2)]">
-          {tab === "pending" ? "No items waiting to ship." : "No shipped orders yet."}
+          {tab === "pending" ? "No items waiting to ship." : "No completed orders yet."}
         </p>
       ) : (
         <div className="overflow-x-auto">
@@ -140,19 +151,48 @@ export default function SalesTabs({
                   {formatPriceCents(item.unitPriceCents * item.quantity)}
                 </div>
 
-                <div className="w-40 shrink-0 text-right">
+                <div className="flex w-52 shrink-0 flex-col items-end gap-2">
                   {item.shippingStatus === "PENDING_SHIPMENT" ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => updateStatus(item.id, "SHIPPED")}
+                        disabled={inFlightIds.has(item.id)}
+                        className="btn-secondary px-4 py-2 text-[0.62rem] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {inFlightIds.has(item.id)
+                          ? "Saving…"
+                          : item.fulfillmentMethod === "PICKUP"
+                            ? "Mark as Picked Up"
+                            : "Mark as Shipped"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateStatus(item.id, "CANCELLED")}
+                        disabled={inFlightIds.has(item.id)}
+                        className="text-[0.62rem] uppercase tracking-[0.1em] text-[var(--muted)] underline disabled:opacity-50"
+                      >
+                        Cancel and refund
+                      </button>
+                    </>
+                  ) : item.shippingStatus === "SHIPPED" && item.fulfillmentMethod === "SHIP" ? (
                     <button
                       type="button"
-                      onClick={() => markShipped(item.id)}
+                      onClick={() => updateStatus(item.id, "DELIVERED")}
                       disabled={inFlightIds.has(item.id)}
                       className="btn-secondary px-4 py-2 text-[0.62rem] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {inFlightIds.has(item.id)
-                        ? "Marking…"
-                        : item.fulfillmentMethod === "PICKUP"
-                          ? "Mark as Picked Up"
-                          : "Mark as Shipped"}
+                      {inFlightIds.has(item.id) ? "Saving…" : "Mark as delivered"}
+                    </button>
+                  ) : item.shippingStatus === "CANCELLED" &&
+                    item.refundedAmountCents < item.unitPriceCents * item.quantity + item.shippingCostCents ? (
+                    <button
+                      type="button"
+                      onClick={() => updateStatus(item.id, "CANCELLED")}
+                      disabled={inFlightIds.has(item.id)}
+                      className="btn-secondary px-4 py-2 text-[0.62rem] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {inFlightIds.has(item.id) ? "Saving…" : "Retry refund"}
                     </button>
                   ) : (
                     <span
